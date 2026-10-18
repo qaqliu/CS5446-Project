@@ -4,9 +4,7 @@
 
 ## Demo video
 
-<video src="asset/800.mp4" controls width="720">
-  <a href="asset/800.mp4">观看 PPO demo / Watch the PPO demo</a>
-</video>
+https://github.com/user-attachments/assets/5e6abbc9-3a59-443b-90a7-cb016aea178c
 
 <a id="chinese"></a>
 
