@@ -1,6 +1,7 @@
 """Policy training entry point."""
 
 import argparse
+from copy import deepcopy
 from pathlib import Path
 from pprint import pprint
 
@@ -32,7 +33,10 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_config(args.config)
-    pprint(config, sort_dicts=False)
+    printed_config = deepcopy(config)
+    if "api_key" in printed_config.get("wandb", {}):
+        printed_config["wandb"]["api_key"] = "<redacted>"
+    pprint(printed_config, sort_dicts=False)
     env = build_env(config)
     # Seed model initialization before passing the models to the trainer.
     set_random_seed(config["trainer"]["training_seed"])

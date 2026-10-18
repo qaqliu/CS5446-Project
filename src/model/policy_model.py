@@ -55,4 +55,21 @@ class MLPPolicy(nn.Module):
             )
         return self.network(features)
 
+
+    def forward_batch(self, observations: Sequence[Any]) -> Tensor:
+        """Evaluate local observations together, with the same None -> zero rule.
+
+        This opt-in path is for the stateless Linear/ReLU demo network. Stack
+        inputs on CPU first so CUDA receives one batch instead of many tiny copies.
+        """
+        parameter = next(self.parameters())
+        features = torch.stack([
+            torch.zeros(self.input_dim, dtype=parameter.dtype)
+            if observation is None else torch.as_tensor(
+                observation, dtype=parameter.dtype, device="cpu",
+            )
+            for observation in observations
+        ]).to(parameter.device)
+        return self.network(features)
+
 # team policy model

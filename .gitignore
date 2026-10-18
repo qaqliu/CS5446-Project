@@ -146,3 +146,6 @@ events.out.tfevents.*
 *.nav
 *.snm
 *.synctex.gz
+
+# README demo video
+!asset/800.mp4

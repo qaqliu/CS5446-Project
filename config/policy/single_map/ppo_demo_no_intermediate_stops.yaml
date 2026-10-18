@@ -2,7 +2,7 @@
 random_map: false
 map_seed: 42
 width: 25
-height: 25
+height: 15
 max_num_cities: 2
 grid_mode: true
 max_rails_between_cities: 1
@@ -63,14 +63,30 @@ gae_lambda: 0.0
 normalize_advantage: true
 
 # Optimizer config
-total_epochs: 5000 # Each epoch collects one rollout and performs its PPO updates.
-lr_schedule: constant # Options: constant, linear, cosine_with_warmup (10% warmup).
+total_epochs: 800 # Each epoch collects one rollout and performs its PPO updates.
+lr_schedule: constant # Options: constant, linear, cosine.
 actor_lr: 0.0003
 critic_lr: 0.0003
 clip_epsilon: 0.2
 entropy_coef: 0.01
+entropy_schedule: cosine # Options: constant, linear, cosine.
+entropy_coef_final: 0.001
 max_grad_norm: 0.5
 target_kl: null # null disables the optional early stopping based on KL divergence.
 
 # Log config
 log_interval: 50
+wandb:
+  enabled: true
+  interval: 10
+  api_key: [YOUR_WANDB_API_KEY] # Replace with your actual Weights & Biases API key.
+  project: [YOUR_WANDB_PROJECT_NAME] # Replace with your actual Weights & Biases project name.
+  entity: [YOUR_WANDB_ENTITY_NAME] # Replace with your actual Weights & Biases entity name.
+  name: ppo_demo_no_intermediate_stops
+
+# Checkpoint config
+save_dir: ./checkpoints/policy/single_map/ppo_demo_no_intermediate_stops
+checkpoint_interval: 200
+
+# Visualize config
+visualize_dir: ./output/policy/single_map/ppo_demo_no_intermediate_stops

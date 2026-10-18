@@ -20,6 +20,8 @@ dependencies:
       - flatland-rl==4.3.0
       # Flatland's official flattened observation builders import RLlib.
       - ray[rllib]==2.58.0
+      # PyArrow 26 requires NumPy 2; Flatland uses NumPy 1.26.
+      - pyarrow==25.0.1
       - gymnasium>=1.2,<2
       # Flatland requires NumPy < 2; avoid accidental incompatible upgrades.
       - numpy==1.26.4
@@ -32,6 +34,7 @@ dependencies:
       - pyyaml>=6,<7
       - tensorboard>=2.18,<3
       - tqdm>=4.66,<5
+      - wandb>=0.19,<1
 
       # Result plots, railway rendering, and GIF/MP4 export.
       - matplotlib>=3.9,<3.11

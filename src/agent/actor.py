@@ -37,6 +37,21 @@ class Actor(nn.Module, ABC):
         """Return five action logits per agent, preserving gradients for training."""
         raise NotImplementedError
 
+    def get_logits_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> ActionLogits:
+        """Return [time, action] logits per agent without selecting new actions.
+
+        Default models retain their full observation/info dictionaries and their
+        original single-state calls. Models can opt in to batched local inputs
+        by implementing forward_batch, as the demo MLP does.
+        """
+        outputs = [
+            self._get_logits(obs, infos)
+            for obs, infos in zip(observations, current_infos)
+        ]
+        return {i: torch.stack([out[i] for out in outputs]) for i in outputs[0]}
+
     def _get_action(
         self,
         logits: ActionLogits,
@@ -121,6 +136,17 @@ class IndependentActor(Actor):
         }
 
 
+    def get_logits_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> ActionLogits:
+        if not all(callable(getattr(model, "forward_batch", None)) for model in self.model.values()):
+            return super().get_logits_batch(observations, current_infos)
+        return {
+            int(i): model.forward_batch([obs[int(i)] for obs in observations])
+            for i, model in self.model.items()
+        }
+
+
 class ShareNetworkActor(Actor):
     """Use one shared model to compute logits separately for each agent.
 
@@ -148,6 +174,18 @@ class ShareNetworkActor(Actor):
             )
             for agent_id in observations
         }
+
+
+    def get_logits_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> ActionLogits:
+        if not callable(getattr(self.model, "forward_batch", None)):
+            return super().get_logits_batch(observations, current_infos)
+        agent_ids = list(observations[0])
+        logits = self.model.forward_batch([
+            obs[i] for obs in observations for i in agent_ids
+        ]).reshape(len(observations), len(agent_ids), -1)
+        return {i: logits[:, col] for col, i in enumerate(agent_ids)}
 
 
 class CentralizedActor(Actor):

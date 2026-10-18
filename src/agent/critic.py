@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import torch
 from torch import Tensor, nn
 
 
@@ -52,6 +53,21 @@ class Critic(nn.Module, ABC):
         )
 
 
+    def get_values_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> AgentValues:
+        """Return [time, 1] values per agent for PPO's batch evaluation.
+
+        Default models preserve their full single-state inputs. A forward_batch
+        method explicitly opts a local model into batched observation evaluation.
+        Team-value critics require a different training target and are unsupported.
+        """
+        outputs = [self(obs, infos) for obs, infos in zip(observations, current_infos)]
+        if not all(isinstance(out, dict) for out in outputs):
+            raise ValueError("Batched PPO evaluation requires per-agent critic values.")
+        return {i: torch.stack([out[i] for out in outputs]) for i in outputs[0]}
+
+
 class IndependentCritic(Critic):
     """Use a separate state-value model for each agent.
 
@@ -82,6 +98,17 @@ class IndependentCritic(Critic):
         }
 
 
+    def get_values_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> AgentValues:
+        if not all(callable(getattr(model, "forward_batch", None)) for model in self.model.values()):
+            return super().get_values_batch(observations, current_infos)
+        return {
+            int(i): model.forward_batch([obs[int(i)] for obs in observations])
+            for i, model in self.model.items()
+        }
+
+
 class ShareNetworkCritic(Critic):
     """Use one shared model to estimate each agent's state value separately.
 
@@ -108,6 +135,18 @@ class ShareNetworkCritic(Critic):
             )
             for agent_id in observations
         }
+
+
+    def get_values_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> AgentValues:
+        if not callable(getattr(self.model, "forward_batch", None)):
+            return super().get_values_batch(observations, current_infos)
+        agent_ids = list(observations[0])
+        values = self.model.forward_batch([
+            obs[i] for obs in observations for i in agent_ids
+        ]).reshape(len(observations), len(agent_ids), 1)
+        return {i: values[:, col] for col, i in enumerate(agent_ids)}
 
 
 class CentralizedCritic(Critic):
