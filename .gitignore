@@ -73,6 +73,7 @@ outputs/
 results/
 runs/
 checkpoints/
+chkpt/
 wandb/
 mlruns/
 mlartifacts/
@@ -81,6 +82,7 @@ events.out.tfevents.*
 *.pt
 *.pth
 *.ckpt
+*.chkpt
 *.safetensors
 *.onnx
 *.pkl
