@@ -504,6 +504,9 @@ class PPOTrainer(BaseTrainer):
         ):
             # Fix entropy strength for this rollout, independent of minibatches/early stop.
             self.entropy_coef = self._get_entropy_coef(epoch)
+            # Record rates used for this epoch before schedulers advance.
+            actor_lr = self.actor_optimizer.param_groups[0]["lr"]
+            critic_lr = self.critic_optimizer.param_groups[0]["lr"]
             # Step 1: Collect fresh data and accumulate completed-episode statistics.
             rollout = self.collect_rollout()
             for episode in rollout["episode_stats"]:
@@ -558,7 +561,12 @@ class PPOTrainer(BaseTrainer):
                 epoch % self.config["wandb"]["interval"] == 0 or epoch == self.total_epochs
             ):
                 # Missing episodes/samples produce gaps, rather than misleading zeros.
-                logged = {"episodes": total_episodes}
+                logged = {
+                    "episodes": total_episodes,
+                    "actor_lr": actor_lr,
+                    "critic_lr": critic_lr,
+                    "entropy_coef": self.entropy_coef,
+                }
                 for source, target, count in (
                     ("reward", "reward", wandb_episodes),
                     ("completion_rate", "completion_rate", wandb_episodes),

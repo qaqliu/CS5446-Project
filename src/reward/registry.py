@@ -39,6 +39,6 @@ def get_reward(name: str) -> type:
     return _REWARDS[name]
 
 
-def build_reward(name: str, **kwargs):
-    """Create a registered reward, passing keyword arguments to its constructor."""
-    return get_reward(name)(**kwargs)
+def build_reward(name: str, reward_config: dict | None = None):
+    """Create a reward with the complete reward.config mapping (or None)."""
+    return get_reward(name)(reward_config)

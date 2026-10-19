@@ -7,8 +7,26 @@ from flatland.envs.predictions import ShortestPathPredictorForRailEnv
 from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.envs.line_generators import sparse_line_generator
-from flatland.envs.rewards import DefaultRewards
 from flatland.envs.timetable_generators import timetable_generator
+
+from src.reward import build_reward
+
+
+class RewardRailEnv(RailEnv):
+    """Run optional reward hooks at episode reset and after a complete step."""
+
+    def reset(self, *args, **kwargs):
+        result = super().reset(*args, **kwargs)
+        if hasattr(self.rewards, "reset"):
+            self.rewards.reset(self)
+        return result
+
+    def step(self, action_dict):
+        observations, rewards, dones, infos = super().step(action_dict)
+        if hasattr(self.rewards, "after_step"):
+            rewards = self.rewards.after_step(self, rewards)
+            self.rewards_dict = rewards
+        return observations, rewards, dones, infos
 
 
 def _make_timetable(agents, distance_map, agents_hints, np_random, *, max_episode_steps):
@@ -44,8 +62,9 @@ def build_env(config: dict) -> RailEnv:
     else:
         raise ValueError(f"Unknown observation type: {obs_type!r}")
 
-    if config["reward"]["type"] != "default":
-        raise ValueError("Only the default reward is implemented.")
+    rewards = build_reward(
+        config["reward"]["type"], config["reward"].get("config"),
+    )
     stops = config["intermediate_stops"]
     line_length = stops["line_length"] if stops["enabled"] else 2
     if stops["enabled"] and line_length < 3:
@@ -54,7 +73,7 @@ def build_env(config: dict) -> RailEnv:
     if max_steps is not None and (type(max_steps) is not int or max_steps <= 0):
         raise ValueError("max_episode_steps must be null or a positive integer.")
 
-    return RailEnv(
+    return RewardRailEnv(
         width=config["width"],
         height=config["height"],
         number_of_agents=config["number_of_agents"],
@@ -68,7 +87,7 @@ def build_env(config: dict) -> RailEnv:
             speed_ratio_map=config["speed_ratio_map"], line_length=line_length
         ),
         obs_builder_object=obs_builder,
-        rewards=DefaultRewards(),
+        rewards=rewards,
         timetable_generator=partial(_make_timetable, max_episode_steps=max_steps),
         random_seed=config["map_seed"],
         remove_agents_at_target=True,

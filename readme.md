@@ -4,7 +4,7 @@
 
 ## Demo video
 
-https://github.com/user-attachments/assets/5e6abbc9-3a59-443b-90a7-cb016aea178c
+https://github.com/user-attachments/assets/624e2828-ca60-426b-a941-bf6e2033a724
 
 <a id="chinese"></a>
 
@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/5e6abbc9-3a59-443b-90a7-cb016aea178c
 
 这是 CS5446 课程项目的团队仓库。项目使用 Flatland 铁路仿真环境，研究多列车共享轨道时的交通协调问题，重点关注到站率、通行效率、延误和死锁。仓库提供配置驱动的训练管线，让队友按现有接口实现模型、奖励或训练方法，再通过 YAML 组合实验，减少重复编写环境交互和训练流程的工作。
 
-**当前已完成第一版 PPO demo 的完整代码管线**：配置加载、环境与 agent 构建、rollout 采集、TD/GAE 优势估计、PPO 更新、训练日志、checkpoint 保存，以及确定性策略视频导出。当前小地图 demo 使用 800 epoch checkpoint，确定性策略下两辆列车全部到站，视频见本文开头。
+**当前已完成第一版 PPO demo 的完整代码管线**：配置加载、环境与 agent 构建、rollout 采集、TD/GAE 优势估计、PPO 更新、训练日志、checkpoint 保存，以及确定性策略视频导出。当前 demo 使用树深度 3 的共享 PPO 和 champion 奖励，80 epoch checkpoint 在固定 30×30 地图上以确定性策略让 8 辆列车全部到站，整局在第 100 步完成。
 
 项目背景参考 [Flatland 官方竞赛页面](https://www.aicrowd.com/challenges/flatland)、[Flatland Competition 2020](https://proceedings.mlr.press/v133/laurent21a.html) 和 [Flatland 官方文档](https://flatland-association.github.io/flatland-book/)。
 
@@ -88,7 +88,10 @@ wandb:
 │   │   ├── policy_model.py    # 定义从观测到动作 logits 的策略网络
 │   │   ├── critic_model.py    # 定义从观测到状态价值 V(s) 的评论家网络
 │   │   └── value_model.py     # 用于定义从观测到各动作价值 Q(s,a) 的网络
-│   ├── reward/                # 用于定义奖励规则与奖励组合，向训练提供每辆车的标量反馈
+│   ├── reward/                # 定义并注册奖励规则，向训练提供每辆车的标量反馈
+│   │   ├── registry.py        # 按名称自动发现并构造奖励类
+│   │   ├── rewards.py         # 实现奖励计算，通过统一配置接口读取参数
+│   │   └── deadlock.py        # 根据轨道出口和列车占用依赖判断死锁
 │   ├── trainer/               # 管理环境采样、学习目标、损失计算和参数更新
 │   │   ├── registry.py        # 将训练方法名称映射到 trainer 类并构造实例
 │   │   ├── policy_trainer.py  # 定义策略梯度训练流程，组织 rollout、优势估计与策略/价值更新
@@ -110,29 +113,42 @@ wandb:
 
 ## 当前 demo 与配置说明
 
-当前默认 demo 使用固定的 **25×15 地图、2 个城市、2 列车**，所有列车速度为 1，不设经停站。`map_seed: 42` 控制地图与任务生成，`trainer.training_seed: 42` 控制模型初始化、动作采样及训练随机过程；两者独立设置。`random_map: false` 时，后续 reset 保留同一套轨道、列车任务和时刻表；设为 `true` 时，后续 episode 沿环境随机数序列生成新场景。
+当前默认 demo 使用固定的 **30×30 地图、6 个城市、8 列车**，所有列车速度为 1，不设经停站。`map_seed: 42` 控制地图与任务生成，`trainer.training_seed: 42` 控制模型初始化、动作采样及训练随机过程；两者独立设置。`random_map: false` 时，后续 reset 保留同一套轨道、列车任务和时刻表；设为 `true` 时，后续 episode 沿环境随机数序列生成新场景。
 
-观测使用官方归一化展平树，深度为 2，输入维度为 252。每个树节点包含 12 个特征，深度为 d 时输入维度为 `12 × (1 + 4 + ... + 4^d)`，因此深度 3 和 4 分别对应 1020 和 4092；更改深度时要同步修改 actor、critic 的 `input_dim`。`observation_radius` 用于部分距离特征的归一化，不是树深度或地图裁剪半径。
+观测使用官方归一化展平树，深度为 3，输入维度为 1020。每个树节点包含 12 个特征，深度为 d 时输入维度为 `12 × (1 + 4 + ... + 4^d)`，因此深度 3 和 4 分别对应 1020 和 4092；更改深度时要同步修改 actor、critic 的 `input_dim`。`observation_radius` 用于部分距离特征的归一化，不是树深度或地图裁剪半径。
 
 Actor 和 critic 各自采用 `[64, 64]` 的 ReLU MLP。Actor 输出 5 个动作的 logits，critic 输出一个状态价值。两者是分别实例化、分别优化的网络；配置中的 `shared` 指不同列车共用同一个 actor，以及共用另一个 critic，并不表示 actor 与 critic 共用参数。动作编号为 0 不操作、1 左转、2 直行、3 右转、4 停车；动作掩码屏蔽轨道不允许的移动方向，不负责规划路线或避免所有占用冲突和死锁。
 
-奖励目前使用 Flatland 的 `DefaultRewards()`，主要围绕延误、未完成任务和经停站服务等规则计分，不能理解为每步固定扣 1 分。`max_episode_steps: null` 使用 Flatland 时刻表生成的默认局长；当前配置生成的上限为 58 步，也可以在 YAML 中指定正整数。
+奖励目前使用 `champion`：`0.01 × 距离进展 − 5 × 首次死锁 + 10 × 首次到站`，替代 Flatland 默认评分。奖励参数放在 `reward.config` 下；改为 `reward.type: default`、`reward.config: null` 可使用原生默认奖励。`max_episode_steps: null` 使用 Flatland 时刻表生成的默认局长，当前配置上限为 138 步，也可以在 YAML 中指定正整数。
 
 | 配置项 | 含义 |
 |---|---|
 | `actor.type` / `critic.type` | `shared` 为列车间共享参数，`independent` 为每辆列车单独持有网络 |
 | `actor.model` / `critic.model` | 注册名称、输入维度、隐藏层等模型构造参数 |
-| `rollout_steps` | 每轮采集的环境步数，当前为 256 |
-| `total_epochs` | 外层训练轮数，当前为 800；每轮重新采样并优化 |
+| `rollout_steps` | 每轮采集的环境步数，当前为 1024 |
+| `total_epochs` | 外层训练轮数，当前为 80；每轮重新采样并优化 |
 | `update_epochs` | 同一批 rollout 最多重复优化的轮数，当前为 4 |
-| `batch_size` | 每个 minibatch 的有效“时间步、列车”样本数量，当前为 128 |
+| `batch_size` | 每个 minibatch 的有效“时间步、列车”样本数量，当前为 512 |
 | `gamma` / `gae_lambda` | 折扣因子与 GAE 参数；当前 lambda 为 0，即一步 TD 风格优势估计 |
 | `lr_schedule` | `constant`、`linear`、`cosine`，按外层 epoch 调度，无 warmup |
 | `entropy_schedule` | `constant`、`linear`、`cosine`，控制熵奖励系数随训练变化 |
 | `target_kl` | 可选 KL 提前停止阈值；`null` 关闭，仅停止当前 rollout 剩余更新 |
 | `log_interval` / `wandb.interval` | 分别控制终端和 W&B 的记录间隔，单位为外层 epoch |
-| `save_dir` / `checkpoint_interval` | checkpoint 目录与保存间隔，当前每 200 个外层 epoch 保存一次 |
+| `save_dir` / `checkpoint_interval` | checkpoint 目录与保存间隔，当前每 20 个外层 epoch 保存一次 |
 | `visualize_dir` | 地图图片和运行视频的输出目录 |
+
+## 当前 demo 验证结果
+
+以下结果来自同一次 80 epoch 训练的 checkpoint，在其保存的固定地图与任务配置上逐步选择概率最大的合法动作。该结果验证当前场景中的确定性表现，不代表跨地图或列车数量变化后的泛化能力。
+
+| Checkpoint | 确定性到站率 | 完成情况 |
+|---|---|---|
+| `20.pt` | 7/8（87.5%） | Agent 6 在 138 步时限结束时仍未到站 |
+| `40.pt` | 8/8（100%） | 第 100 步全部到站 |
+| `60.pt` | 8/8（100%） | 第 100 步全部到站 |
+| `80.pt` | 8/8（100%） | 第 100 步全部到站 |
+
+`80.pt` 各列车的到站步数为：Agent 0：38、1：65、2：100、3：87、4：93、5：75、6：35、7：97。训练阶段仍使用随机动作采样，结果应与训练曲线中的窗口平均到站率区分。
 
 ## 训练流程与指标
 
@@ -149,6 +165,8 @@ Actor 使用带 clipping 的 PPO 策略损失减去熵奖励，critic 使用预�
 | `critic_loss` | 价值预测 MSE，按评估的 critic 样本数加权平均 |
 | `entropy` | 有效动作分布的平均熵，按 actor 样本数加权平均 |
 | `kl` | 新旧策略的近似 KL，按 actor 样本数加权平均 |
+| `actor_lr` / `critic_lr` | W&B 记录当前 epoch 更新时实际使用的 actor / critic 学习率 |
+| `entropy_coef` | W&B 记录当前 epoch 实际使用的熵奖励权重 |
 
 训练阶段从动作分布采样，视频阶段选择合法动作中概率最大的动作，因此训练曲线的到站率与确定性视频的到站率可能不同。W&B 初始化时保存除认证密钥外的完整实验配置；终端与 W&B 分别按各自窗口统计。KL 检查触发时，该 minibatch 的指标仍纳入统计，但不执行该 minibatch 的参数更新。
 
@@ -160,7 +178,7 @@ Checkpoint 使用 `<epoch>.pt` 命名，包含 `epoch`、`actor`、`critic` 和�
 
 `src/agent/` 已提供独立、共享与集中式包装接口，当前 PPO demo 主要用于独立和共享网络。集中式方式需要匹配联合输入的模型，不能直接把本地观测 MLP 切换为集中式模型；单个团队价值的 centralized critic 暂不属于当前 PPO demo 的支持范围。`value.py` 已有 Q 值和 epsilon-greedy 接口，但对应模型和 trainer 尚未实现。
 
-自定义奖励预留在 `src/reward/`。后续可实现 Flatland `Rewards` 接口，并在 `build_env()` 中通过 `rewards=` 传入；每辆车仍返回一个标量时，PPO trainer 不需要改动。目前环境构建只接入了 `default`，其他奖励尚未配置化；历史缓存需要配合 episode reset 清理，全局死锁判断需要使用同一时刻的环境状态。
+奖励放在 `src/reward/`，使用 `@register(name="your_reward")` 注册，并通过 YAML 的 `reward.type` 选择；`reward.config` 整体传给 `__init__(self, reward_config)`，设为 `null` 时使用奖励类的默认参数。现有 `default` 使用 Flatland 默认评分，`champion` 使用 `0.01 × 距离进展 − 5 × 首次死锁 + 10 × 首次到站`，替代默认评分；三项系数分别可通过 `reward.config` 下的 `progress_coef`、`deadlock_penalty`、`finish_bonus` 配置。`champion` 基于 JBR_HSE 团队后续开源奖励组件适配，来源与实现边界见 [ChampionRewards 类说明](src/reward/rewards.py)。环境层通过 `RewardRailEnv` 在 reset 时清理奖励历史、在整步结束后统一检查死锁，避免读取部分更新的列车状态；PPO trainer 接收的仍是每辆车一个标量奖励。
 
 ## 当前进度与 TODO
 
@@ -181,7 +199,7 @@ Checkpoint 使用 `<epoch>.pt` 命名，包含 `epoch`、`actor`、`critic` 和�
 
 This CS5446 team project studies railway traffic coordination with multiple trains sharing tracks in Flatland. The repository provides configurable environment construction, agent interfaces, registered models, and training pipelines so that teammates can implement components without rebuilding the entire interaction loop.
 
-**The first PPO demo pipeline is implemented**, including rollout collection, TD/GAE advantages, PPO optimization, logging, checkpoints, map previews, and deterministic video export. The current small-map demo reaches 100% completion (2/2 trains) with deterministic actions using the 800-epoch checkpoint; the video is shown at the top.
+**The first PPO demo pipeline is implemented**, including rollout collection, TD/GAE advantages, PPO optimization, logging, checkpoints, map previews, and deterministic video export. The current demo uses shared PPO, depth-3 observations, and champion-style rewards. Its 80-epoch checkpoint reaches 100% completion (8/8 trains) on the fixed 30×30 map in 100 environment steps with deterministic actions.
 
 ## Setup and usage
 
@@ -203,25 +221,29 @@ Map previews are saved to `visualize_dir/map_preview.png`. Policy visualization 
 
 The repository separates network computation, agent organization, reward definition, and training. In `src/model/`, `policy_model.py` maps observations to action logits, `critic_model.py` maps observations to state values, and `value_model.py` is the location for action-value networks. In `src/agent/`, the corresponding wrappers organize independent, shared, or centralized models and expose value estimation or action selection. `src/reward/` is the location for scalar reward rules and their composition. In `src/trainer/`, `policy_trainer.py` organizes rollout collection, advantage estimation, and policy/value updates; `value_trainer.py` is the location for Q-learning targets and updates. Registries construct models and trainers by name. `src/utils/` handles environment construction/reset, agent construction, action masks, and random seeds. YAML files select experiment components and parameters; entry scripts assemble training or visualization runs. Further background is available in [technical_guide](technical_guide/).
 
-The default demo uses a fixed 25×15 map, two cities, two unit-speed trains, and no intermediate stops. A depth-2 normalized flattened tree supplies 252 features to separate policy and critic MLPs with hidden widths `[64, 64]` and ReLU activations. The policy produces five action logits; the critic produces one state value. Shared networks share parameters across trains, while actor and critic retain separate parameters. The legal-action mask does not provide conflict-free routing or deadlock prevention.
+The default demo uses a fixed 30×30 map, six cities, eight unit-speed trains, and no intermediate stops. A depth-3 normalized flattened tree supplies 1020 features to separate policy and critic MLPs with hidden widths `[64, 64]` and ReLU activations. The policy produces five action logits; the critic produces one state value. Shared networks share parameters across trains, while actor and critic retain separate parameters. The legal-action mask does not provide conflict-free routing or deadlock prevention.
 
-Map generation and training use separate seeds. Fixed-map resets preserve rails, train tasks, and timetables; random-map resets generate subsequent scenarios from the seeded RNG sequence. A null episode limit uses Flatland's generated limit, currently 58 steps for this configuration. Rewards currently use Flatland's `DefaultRewards`, rather than a fixed negative reward every step.
+Map generation and training use separate seeds. Fixed-map resets preserve rails, train tasks, and timetables; random-map resets generate subsequent scenarios from the seeded RNG sequence. A null episode limit uses Flatland's generated limit, currently 138 steps for this configuration. The demo selects `champion` rewards: `0.01 * distance_progress - 5 * first_deadlock + 10 * first_arrival`, replacing default scoring. Parameters are nested under `reward.config`; use `reward.type: default` and `reward.config: null` to select native default scoring.
+
+## Demo evaluation
+
+Deterministic evaluation on the saved fixed scenario gives 7/8 arrivals for `20.pt` and 8/8 arrivals for `40.pt`, `60.pt`, and `80.pt`. All three successful checkpoints finish the episode in 100 steps, within the 138-step limit. With `80.pt`, arrival steps for agents 0–7 are `[38, 65, 100, 87, 93, 75, 35, 97]`. These are fixed-scenario results; transfer across maps and train counts remains future work.
 
 ## Training and outputs
 
-Each outer epoch collects `rollout_steps` environment transitions, computes fixed advantages and return targets, then reuses the rollout for up to `update_epochs` optimization passes. A minibatch contains individual valid time–train pairs. Rollouts may span multiple episodes, and unfinished episodes continue across rollout boundaries. The default `gae_lambda: 0` gives one-step TD advantages; larger values enable multi-step GAE. The default run uses 800 outer epochs, 256 environment steps per rollout, four update passes, and minibatches of 128 time–train samples.
+Each outer epoch collects `rollout_steps` environment transitions, computes fixed advantages and return targets, then reuses the rollout for up to `update_epochs` optimization passes. A minibatch contains individual valid time–train pairs. Rollouts may span multiple episodes, and unfinished episodes continue across rollout boundaries. The default `gae_lambda: 0` gives one-step TD advantages; larger values enable multi-step GAE. The default run uses 80 outer epochs, 1024 environment steps per rollout, four update passes, and minibatches of 512 time–train samples.
 
 The actor uses the clipped PPO objective with an entropy bonus; the critic uses value MSE. Gradient clipping, optional KL early stopping, and constant/linear/cosine learning-rate and entropy schedules are available. Learning-rate schedules advance once per outer epoch, without warmup.
 
-Logs report cumulative ended episodes, mean per-train episode return, completion rate, actor and critic losses, entropy, and approximate KL. Reward and completion statistics average ended episodes in the logging window; losses, entropy, and KL use their respective evaluated sample counts. Completion requires `TrainState.DONE`; reaching the time limit alone does not count as arrival. Training samples actions, while video evaluation selects the highest-probability legal action, so their completion rates can differ. W&B records the experiment configuration excluding its authentication key.
+Logs report cumulative ended episodes, mean per-train episode return, completion rate, actor and critic losses, entropy, and approximate KL. Reward and completion statistics average ended episodes in the logging window; losses, entropy, and KL use their respective evaluated sample counts. Completion requires `TrainState.DONE`; reaching the time limit alone does not count as arrival. Training samples actions, while video evaluation selects the highest-probability legal action, so their completion rates can differ. W&B also records `actor_lr`, `critic_lr`, and `entropy_coef` as used in the logged epoch, before the learning-rate schedulers advance. It records the experiment configuration excluding its authentication key.
 
-Checkpoints contain `epoch`, actor weights, critic weights, and the full configuration, saved as `<epoch>.pt` every 200 outer epochs in the default configuration and at the final epoch. Optimizer/scheduler restoration and training resume are not implemented.
+Checkpoints contain `epoch`, actor weights, critic weights, and the full configuration, saved as `<epoch>.pt` every 20 outer epochs in the default configuration and at the final epoch. Optimizer/scheduler restoration and training resume are not implemented.
 
 ## Extending the demo
 
 Add models under `src/model/`, register them with `@register(name="your_model")`, and reference their names and constructor parameters in YAML. Follow the existing actor/critic model interfaces; an optional `forward_batch` enables batched inference. The current PPO demo focuses on independent and shared networks; centralized models require joint-input implementations, and a single team-value critic is not supported by this demo.
 
-Custom scalar rewards can implement Flatland's `Rewards` interface and be passed through `build_env()` without changing PPO. Only the default reward is currently wired into configuration; stateful reward reset and consistent global deadlock detection still need to be implemented when adding shaping.
+Register scalar rewards under `src/reward/` with `@register(name="your_reward")` and select them through `reward.type`; the complete `reward.config` mapping is passed to `__init__(self, reward_config)`, with `null` selecting the reward class defaults. `default` uses Flatland scoring, while `champion` replaces it with distance progress (0.01), a one-time deadlock penalty (-5), and a one-time arrival bonus (+10). Coefficients are configurable as `progress_coef`, `deadlock_penalty`, and `finish_bonus` under `reward.config`. This adapts the JBR_HSE team's later open-source components; see [the source and adaptation notes on ChampionRewards](src/reward/rewards.py). `RewardRailEnv` resets reward history and runs global shaping after the complete environment step. PPO remains unchanged.
 
 ## Progress and TODO
 
