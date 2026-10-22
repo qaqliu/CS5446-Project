@@ -94,7 +94,7 @@ wandb:
 │   │   └── deadlock.py        # 根据轨道出口和列车占用依赖判断死锁
 │   ├── trainer/               # 管理环境采样、学习目标、损失计算和参数更新
 │   │   ├── registry.py        # 将训练方法名称映射到 trainer 类并构造实例
-│   │   ├── policy_trainer.py  # 定义策略梯度训练流程，组织 rollout、优势估计与策略/价值更新
+│   │   ├── policy_trainer.py  # 定义 BaseTrainer、固定步数 demo 和按完整 episode 采样的 PPO 训练流程
 │   │   └── value_trainer.py   # 用于定义基于 Q 值的采样、学习目标与网络更新流程
 │   └── utils/                 # 各模块共用的构建与辅助函数
 │       ├── environment.py     # 按配置创建 Flatland 环境，管理地图与任务的 reset 行为
@@ -152,17 +152,24 @@ Actor 和 critic 各自采用 `[64, 64]` 的 ReLU MLP。Actor 输出 5 个动作
 
 ## 训练流程与指标
 
-每个外层 epoch 依次执行 `collect_rollout()`、`compute_advantages()` 和最多 `update_epochs` 次 `update_one_epoch()`，随后推进学习率调度、记录日志并按间隔保存 checkpoint。一次 rollout 可以跨越多个 episode，也可以在 episode 中间结束；未结束的 episode 会在下一轮采样中继续。环境推进依赖前一步动作，按时间顺序执行；demo 网络支持批量前向，critic 推理和更新阶段会尽量合并计算。
+通过 `trainer.type` 选择两套独立实现：`ppo_demo` 对应 `PPODemoTrainer`，保留原来的固定步数采样和更新方式；`ppo` 对应直接继承 `BaseTrainer` 的 `PPOTrainer`，每个外层 epoch 收集一个完整 episode，忽略 `rollout_steps`。两者都接受同一个训练入口和 actor/critic 接口，继续使用现有 MLP 与五动作掩码。新 trainer 仍通过现有 `reset_env()` 重置环境；`random_map: false` 会保留地图、列车任务和时刻表。
 
-Actor 使用带 clipping 的 PPO 策略损失减去熵奖励，critic 使用预测状态价值与固定 return target 的均方误差。更新时固定这批 rollout 的旧动作 log probability、优势和 return target，并对梯度进行裁剪。终端和 W&B 的训练指标定义如下：
+新 `ppo` 在未显式配置时使用：`update_epochs: 3`、`batch_size: 32`、`gamma: 0.995`、`gae_lambda: 0.95`、`gae_horizon: 16`、`actor_lr: 1e-5`、`critic_lr: 1e-5`、`entropy_coef: 0.01`、`value_loss_coef: 0.5`；学习率和熵系数默认 constant，默认不归一化优势、不裁剪梯度、不启用 KL 提前停止。已有 YAML 中显式填写的参数始终优先；仅把 `type` 改成 `ppo` 不会覆盖原有超参数。`gae_horizon: null` 表示使用整段轨迹的 GAE。
+
+新 `ppo` 用一个 Adam 的两个参数组更新 actor 和 critic，scheduler 每个外层 epoch 仅前进一步。Actor 的旧 log probability 和 GAE 在重复更新中固定；critic 每个 minibatch 重新计算当前价值预测，拟合采样后一次性计算并冻结的 GAE return（归一化优势前的 GAE 加旧价值），使用普通 MSE，不再乘策略重要性权重；`critic_loss` 记录乘 `value_loss_coef` 前的 MSE。它迁移了冠军公开代码中的这些训练组件，没有加入通信、发车分类器或决策间隔压缩，不是完整冠军方案复现。
+
+原 `ppo_demo` 每个外层 epoch 依次执行 `collect_rollout()`、`compute_advantages()` 和最多 `update_epochs` 次 `update_one_epoch()`，随后推进学习率调度、记录日志并按间隔保存 checkpoint。一次 rollout 可以跨越多个 episode，也可以在 episode 中间结束；未结束的 episode 会在下一轮采样中继续。环境推进依赖前一步动作，按时间顺序执行；demo 网络支持批量前向，critic 推理和更新阶段会尽量合并计算。
+
+原 ppo_demo 的 actor 使用带 clipping 的 PPO 策略损失减去熵奖励，critic 使用预测状态价值与固定 return target 的均方误差。更新时固定这批 rollout 的旧动作 log probability、优势和 return target，并对梯度进行裁剪。终端和 W&B 的训练指标定义如下：
 
 | 指标 | 统计含义 |
 |---|---|
 | `episodes` | 从训练开始到当前累计结束的 episode 数，包括因时限结束的 episode |
 | `reward` | 统计窗口内已结束 episode 的平均回报；每局先把所有列车的累计奖励相加，再除以列车数 |
 | `completion_rate` | 每局实际处于 `TrainState.DONE` 的列车比例，再对窗口内已结束 episode 求平均 |
+| `deadlock_rate` | 每局曾被死锁检测器标记的列车数除以总列车数，再对窗口内已结束 episode 求平均；未发车、停车或超时本身不算死锁 |
 | `actor_loss` | 包含熵项的 actor loss，按评估的 actor 样本数加权平均 |
-| `critic_loss` | 价值预测 MSE，按评估的 critic 样本数加权平均 |
+| `critic_loss` | ppo_demo 和 ppo 均为拟合冻结 GAE return 的普通 MSE，按 critic 样本数平均，未乘 value_loss_coef |
 | `entropy` | 有效动作分布的平均熵，按 actor 样本数加权平均 |
 | `kl` | 新旧策略的近似 KL，按 actor 样本数加权平均 |
 | `actor_lr` / `critic_lr` | W&B 记录当前 epoch 更新时实际使用的 actor / critic 学习率 |
@@ -231,11 +238,15 @@ Deterministic evaluation on the saved fixed scenario gives 7/8 arrivals for `20.
 
 ## Training and outputs
 
-Each outer epoch collects `rollout_steps` environment transitions, computes fixed advantages and return targets, then reuses the rollout for up to `update_epochs` optimization passes. A minibatch contains individual valid time–train pairs. Rollouts may span multiple episodes, and unfinished episodes continue across rollout boundaries. The default `gae_lambda: 0` gives one-step TD advantages; larger values enable multi-step GAE. The default run uses 80 outer epochs, 1024 environment steps per rollout, four update passes, and minibatches of 512 time–train samples.
+`trainer.type: ppo_demo` selects `PPODemoTrainer`, retaining fixed-step sampling and the original optimization. `trainer.type: ppo` selects the independent `PPOTrainer(BaseTrainer)`, which collects one complete episode per outer epoch and ignores `rollout_steps`. Both use the existing MLP, five-action masks, entry point, logging, and checkpoint interface. Fixed-map resets retain rails, train tasks and timetables when `random_map: false`.
+
+For omitted keys, `ppo` defaults to three update passes, minibatches of 32, gamma 0.995, GAE lambda 0.95, `gae_horizon: 16`, actor/critic learning rates of 1e-5, constant learning-rate/entropy schedules, entropy coefficient 0.01 and `value_loss_coef: 0.5`. Advantage normalization, gradient clipping and KL stopping are disabled by default. Explicit YAML values take precedence. A null horizon uses the whole trajectory. A joint Adam optimizer has two parameter groups and one scheduler step per outer epoch. The critic fits frozen rollout GAE returns, computed before actor advantage normalization; current value predictions are recomputed per minibatch and optimized with ordinary, unweighted MSE. Actor advantages and old log probabilities remain fixed. This adapts published champion training components without communication, a launch classifier or compressed decision intervals.
+
+For ppo_demo, each outer epoch collects `rollout_steps` environment transitions, computes fixed advantages and return targets, then reuses the rollout for up to `update_epochs` optimization passes. A minibatch contains individual valid time–train pairs. Rollouts may span multiple episodes, and unfinished episodes continue across rollout boundaries. The default `gae_lambda: 0` gives one-step TD advantages; larger values enable multi-step GAE. The default run uses 80 outer epochs, 1024 environment steps per rollout, four update passes, and minibatches of 512 time–train samples.
 
 The actor uses the clipped PPO objective with an entropy bonus; the critic uses value MSE. Gradient clipping, optional KL early stopping, and constant/linear/cosine learning-rate and entropy schedules are available. Learning-rate schedules advance once per outer epoch, without warmup.
 
-Logs report cumulative ended episodes, mean per-train episode return, completion rate, actor and critic losses, entropy, and approximate KL. Reward and completion statistics average ended episodes in the logging window; losses, entropy, and KL use their respective evaluated sample counts. Completion requires `TrainState.DONE`; reaching the time limit alone does not count as arrival. Training samples actions, while video evaluation selects the highest-probability legal action, so their completion rates can differ. W&B also records `actor_lr`, `critic_lr`, and `entropy_coef` as used in the logged epoch, before the learning-rate schedulers advance. It records the experiment configuration excluding its authentication key.
+Logs report cumulative ended episodes, mean per-train episode return, completion rate, deadlock rate, actor and critic losses, entropy, and approximate KL. Deadlock rate averages the fraction of all trains ever flagged by the detector in each ended episode; waiting off-grid or timing out alone is not deadlock. Reward and completion statistics average ended episodes in the logging window; losses, entropy, and KL use their respective evaluated sample counts. Completion requires `TrainState.DONE`; reaching the time limit alone does not count as arrival. Training samples actions, while video evaluation selects the highest-probability legal action, so their completion rates can differ. W&B also records `actor_lr`, `critic_lr`, and `entropy_coef` as used in the logged epoch, before the learning-rate schedulers advance. It records the experiment configuration excluding its authentication key.
 
 Checkpoints contain `epoch`, actor weights, critic weights, and the full configuration, saved as `<epoch>.pt` every 20 outer epochs in the default configuration and at the final epoch. Optimizer/scheduler restoration and training resume are not implemented.
 

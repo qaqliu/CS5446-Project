@@ -39,6 +39,7 @@ class Actor(nn.Module, ABC):
 
     def get_logits_batch(
         self, observations: list[Observations], current_infos: list[Infos],
+        addtional_infos: list[AdditionalInfos | None] | None = None,
     ) -> ActionLogits:
         """Return [time, action] logits per agent without selecting new actions.
 
@@ -46,9 +47,10 @@ class Actor(nn.Module, ABC):
         original single-state calls. Models can opt in to batched local inputs
         by implementing forward_batch, as the demo MLP does.
         """
+        extras = addtional_infos if addtional_infos is not None else [None] * len(observations)
         outputs = [
-            self._get_logits(obs, infos)
-            for obs, infos in zip(observations, current_infos)
+            self._get_logits(obs, infos, addtional_infos=extra)
+            for obs, infos, extra in zip(observations, current_infos, extras)
         ]
         return {i: torch.stack([out[i] for out in outputs]) for i in outputs[0]}
 
@@ -84,14 +86,19 @@ class Actor(nn.Module, ABC):
         addtional_infos: AdditionalInfos | None = None,
         action_mask: ActionMasks | None = None,
         deterministic: bool = False,
+        *,
+        attention_mask: Tensor | None = None,
     ) -> tuple[ActionMasks, ActionLogits, Actions]:
         """Return action masks, logits, and actions.
 
         When no mask is supplied, create an all-True mask matching the logits.
-        Optional additional information is forwarded unchanged to the model.
+        Optional additional information is forwarded to the model. Communication
+        actors also accept attention_mask: True means communication is allowed.
         Masks, logits, and actions must use the same agent IDs. The caller
         performs environment interaction and maintains additional information.
         """
+        if attention_mask is not None:
+            addtional_infos = dict(addtional_infos or {}, attention_mask=attention_mask)
         logits = self._get_logits(
             observations, current_infos, addtional_infos=addtional_infos
         )
@@ -138,7 +145,10 @@ class IndependentActor(Actor):
 
     def get_logits_batch(
         self, observations: list[Observations], current_infos: list[Infos],
+        addtional_infos: list[AdditionalInfos | None] | None = None,
     ) -> ActionLogits:
+        if addtional_infos is not None:
+            return super().get_logits_batch(observations, current_infos, addtional_infos)
         if not all(callable(getattr(model, "forward_batch", None)) for model in self.model.values()):
             return super().get_logits_batch(observations, current_infos)
         return {
@@ -178,7 +188,10 @@ class ShareNetworkActor(Actor):
 
     def get_logits_batch(
         self, observations: list[Observations], current_infos: list[Infos],
+        addtional_infos: list[AdditionalInfos | None] | None = None,
     ) -> ActionLogits:
+        if addtional_infos is not None:
+            return super().get_logits_batch(observations, current_infos, addtional_infos)
         if not callable(getattr(self.model, "forward_batch", None)):
             return super().get_logits_batch(observations, current_infos)
         agent_ids = list(observations[0])
@@ -209,3 +222,113 @@ class CentralizedActor(Actor):
         return self.model(
             observations, current_infos, addtional_infos=addtional_infos
         )
+
+
+class CommunicationIndependentNetworkActor(Actor):
+    """One communication model per train, each reading all observations.
+
+    Model interface: forward(observations, attention_mask, agent_id=None).
+    With agent_id set, return that train's [5] logits. With None, the model
+    contract is to return a dict of [5] logits keyed by all observation IDs.
+    This wrapper calls each train's own model with its agent_id explicitly.
+    attention_mask is [N, N], follows list(observations), and defaults to all
+    True (including self). True means allowed; models using nn.MultiheadAttention
+    must invert it for that API's boolean attn_mask. Models handle input devices.
+    """
+
+    def __init__(self, models: dict[int, nn.Module]) -> None:
+        super().__init__()
+        self.model = nn.ModuleDict({str(i): model for i, model in models.items()})
+
+    def _communication_attention_mask(self, observations, addtional_infos):
+        """Rows/columns follow list(observations); True permits attending to a train."""
+        mask = (addtional_infos or {}).get("attention_mask")
+        n = len(observations)
+        if mask is None:
+            return torch.ones(n, n, dtype=torch.bool)
+        if mask.shape != (n, n) or mask.dtype != torch.bool:
+            raise ValueError("attention_mask must be a boolean [num_agents, num_agents] tensor.")
+        return mask
+
+    def _get_logits(
+        self,
+        observations: Observations,
+        current_infos: Infos,
+        addtional_infos: AdditionalInfos | None = None,
+    ) -> ActionLogits:
+        attention_mask = self._communication_attention_mask(observations, addtional_infos)
+        return {
+            int(i): model(observations, attention_mask, agent_id=int(i))
+            for i, model in self.model.items()
+        }
+
+
+    def get_logits_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+        addtional_infos: list[AdditionalInfos | None] | None = None,
+    ) -> ActionLogits:
+        """Batch time independently within each train's communication network."""
+        if (
+            not all(callable(getattr(model, "forward_batch", None)) for model in self.model.values())
+            or any(list(obs) != list(observations[0]) for obs in observations)
+        ):
+            return super().get_logits_batch(observations, current_infos, addtional_infos)
+        extras = addtional_infos if addtional_infos is not None else [None] * len(observations)
+        masks = torch.stack([
+            self._communication_attention_mask(obs, extra)
+            for obs, extra in zip(observations, extras)
+        ])
+        return {
+            int(i): model.forward_batch(observations, masks, agent_id=int(i))
+            for i, model in self.model.items()
+        }
+
+class CommunicationSharedNetworkActor(Actor):
+    """One shared communication model computes all trains' logits in one call.
+
+    Same model/mask contract as CommunicationIndependentNetworkActor. Calling
+    the model with agent_id=None returns {agent_id: [5] logits} for every train.
+    get_logits_batch retains whole-agent observations at each time step, so PPO
+    updates can backpropagate through communication without flattening trains.
+    """
+
+    def __init__(self, model: nn.Module) -> None:
+        super().__init__()
+        self.model = model
+
+    def _communication_attention_mask(self, observations, addtional_infos):
+        """Rows/columns follow list(observations); True permits attending to a train."""
+        mask = (addtional_infos or {}).get("attention_mask")
+        n = len(observations)
+        if mask is None:
+            return torch.ones(n, n, dtype=torch.bool)
+        if mask.shape != (n, n) or mask.dtype != torch.bool:
+            raise ValueError("attention_mask must be a boolean [num_agents, num_agents] tensor.")
+        return mask
+
+    def _get_logits(
+        self,
+        observations: Observations,
+        current_infos: Infos,
+        addtional_infos: AdditionalInfos | None = None,
+    ) -> ActionLogits:
+        attention_mask = self._communication_attention_mask(observations, addtional_infos)
+        return self.model(observations, attention_mask, agent_id=None)
+
+
+    def get_logits_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+        addtional_infos: list[AdditionalInfos | None] | None = None,
+    ) -> ActionLogits:
+        """One forward for all time steps; each keeps its own communication mask."""
+        if (
+            not callable(getattr(self.model, "forward_batch", None))
+            or any(list(obs) != list(observations[0]) for obs in observations)
+        ):
+            return super().get_logits_batch(observations, current_infos, addtional_infos)
+        extras = addtional_infos if addtional_infos is not None else [None] * len(observations)
+        masks = torch.stack([
+            self._communication_attention_mask(obs, extra)
+            for obs, extra in zip(observations, extras)
+        ])
+        return self.model.forward_batch(observations, masks, agent_id=None)
