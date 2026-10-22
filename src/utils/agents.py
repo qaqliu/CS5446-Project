@@ -2,6 +2,7 @@
 
 from src.agent import (
     Actor, CentralizedActor, IndependentActor, ShareNetworkActor,
+    CommunicationIndependentNetworkActor, CommunicationSharedNetworkActor,
     Critic, CentralizedCritic, IndependentCritic, ShareNetworkCritic,
 )
 from src.model import build_model
@@ -21,6 +22,13 @@ def build_agents(config: dict) -> tuple[Actor, Critic]:
         })
     elif actor_config["type"] == "shared":
         actor = ShareNetworkActor(build_model(**actor_config["model"]))
+    elif actor_config["type"] == "communication_independent":
+        actor = CommunicationIndependentNetworkActor({
+            agent_id: build_model(**actor_config["model"])
+            for agent_id in range(config["number_of_agents"])
+        })
+    elif actor_config["type"] == "communication_shared":
+        actor = CommunicationSharedNetworkActor(build_model(**actor_config["model"]))
     elif actor_config["type"] == "centralized":
         actor = CentralizedActor(build_model(**actor_config["model"]))
     else:
