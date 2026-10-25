@@ -10,6 +10,8 @@ from flatland.envs.line_generators import sparse_line_generator
 from flatland.envs.timetable_generators import timetable_generator
 
 from src.reward import build_reward
+# Restores Flatland 4.3's predictor-based conflict features; see the module.
+from src.utils import flatland_patches  # noqa: F401
 
 
 class RewardRailEnv(RailEnv):
