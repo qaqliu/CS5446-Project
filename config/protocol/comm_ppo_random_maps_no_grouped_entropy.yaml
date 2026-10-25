@@ -1,0 +1,89 @@
+# Shared evaluation protocol recipe. Train: python -m scripts.train --config config/protocol/comm_ppo_random_maps_no_grouped_entropy.yaml --seed 42 --out DIR
+# Evaluate: python -m scripts.evaluate DIR. Only training_maps / budget / method fields differ between recipes.
+random_map: false
+map_seed: null
+width: 30
+height: 30
+max_num_cities: 3
+grid_mode: false
+max_rails_between_cities: 2
+max_rail_pairs_in_city: 2
+max_episode_steps: 200
+number_of_agents: 5
+speed_ratio_map:
+  1.0: 1.0
+intermediate_stops:
+  enabled: false
+  line_length: 2
+observation:
+  type: flattened_normalized_tree
+  max_depth: 3
+  observation_radius: 10
+  predictor: null
+reward:
+  type: champion
+  config:
+    progress_coef: 0.01
+    deadlock_penalty: -5.0
+    finish_bonus: 10.0
+actor:
+  type: communication_shared
+  mask_finished: true
+  model:
+    name: communication_mlp_policy
+    input_dim: 1020
+    hidden_dims:
+    - 256
+    - 128
+    communication_dim: 32
+    num_heads: 4
+    head_hidden_dims:
+    - 128
+critic:
+  type: shared
+  model:
+    name: mlp_critic_demo
+    input_dim: 1020
+    hidden_dims:
+    - 128
+    - 128
+trainer:
+  type: ppo
+  training_seed: 42
+  device: cpu
+update_epochs: 3
+batch_size: 32
+gamma: 0.995
+gae_lambda: 0.95
+gae_horizon: null
+normalize_advantage: false
+total_epochs: 7500
+lr_schedule: constant
+actor_lr: 1.0e-05
+critic_lr: 1.0e-05
+clip_epsilon: 0.2
+value_loss_coef: 0.5
+entropy_coef: 0.01
+scheduling_entropy_coef: 0.0
+direction_entropy_coef: 0.0
+entropy_schedule: constant
+entropy_coef_final: 0.02
+max_grad_norm: null
+target_kl: null
+log_interval: 1
+wandb:
+  enabled: false
+  interval: 1
+  api_key:
+  - YOUR_WANDB_API_KEY
+  project:
+  - YOUR_WANDB_PROJECT_NAME
+  entity:
+  - YOUR_WANDB_ENTITY_NAME
+  name: ppo_fixed_map_30x30_3cities_6trains_seed110_ppo_communication
+save_dir: null
+checkpoint_interval: 750
+visualize_dir: null
+training_maps:
+  generator: competition
+  mode: random

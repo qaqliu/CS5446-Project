@@ -1,0 +1,81 @@
+# Shared evaluation protocol recipe. Train: python -m scripts.train --config config/protocol/shared_ppo_random_maps_champion_reward.yaml --seed 42 --out DIR
+# Evaluate: python -m scripts.evaluate DIR. Only training_maps / budget / method fields differ between recipes.
+random_map: false
+map_seed: null
+width: 30
+height: 30
+max_num_cities: 6
+grid_mode: true
+max_rails_between_cities: 3
+max_rail_pairs_in_city: 3
+max_episode_steps: null
+number_of_agents: 5
+speed_ratio_map:
+  1.0: 1.0
+intermediate_stops:
+  enabled: false
+  line_length: 2
+observation:
+  type: flattened_normalized_tree
+  max_depth: 3
+  observation_radius: 2
+  predictor: null
+reward:
+  type: champion
+  config:
+    progress_coef: 0.01
+    deadlock_penalty: -5.0
+    finish_bonus: 10.0
+actor:
+  type: shared
+  model:
+    name: mlp_policy_demo
+    input_dim: 1020
+    hidden_dims:
+    - 64
+    - 64
+critic:
+  type: shared
+  model:
+    name: mlp_critic_demo
+    input_dim: 1020
+    hidden_dims:
+    - 64
+    - 64
+trainer:
+  type: ppo_demo
+  training_seed: 42
+  device: cpu
+rollout_steps: 1024
+update_epochs: 4
+batch_size: 512
+gamma: 0.99
+gae_lambda: 0.95
+normalize_advantage: true
+total_epochs: 3000
+lr_schedule: constant
+actor_lr: 0.0003
+critic_lr: 0.0003
+clip_epsilon: 0.2
+entropy_coef: 0.01
+entropy_schedule: cosine
+entropy_coef_final: 0.001
+max_grad_norm: 0.5
+target_kl: null
+log_interval: 1
+wandb:
+  enabled: false
+  interval: 10
+  api_key:
+  - YOUR_WANDB_API_KEY
+  project:
+  - YOUR_WANDB_PROJECT_NAME
+  entity:
+  - YOUR_WANDB_ENTITY_NAME
+  name: ppo_demo_no_intermediate_stops
+save_dir: null
+checkpoint_interval: 300
+visualize_dir: null
+training_maps:
+  generator: competition
+  mode: random

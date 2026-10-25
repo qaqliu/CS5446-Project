@@ -77,7 +77,10 @@ def evaluate_runs(runs: list[Path], sizes: tuple[int, ...], loader: str | None, 
             for problem in check_training_config(config):
                 print(f"WARNING {run.name}: {problem}", flush=True)
             train_sizes = training_sizes(config)
-            fixed = config.get("actor", {}).get("type") in FIXED_SIZE_ACTORS
+            actor_config = config.get("actor", {})
+            # One network per train, or a one-hot train-ID input sized to the training count.
+            fixed = (actor_config.get("type") in FIXED_SIZE_ACTORS
+                     or "num_agents" in actor_config.get("model", {}))
             plans[run] = dict(checkpoints=checkpoints, train_sizes=train_sizes,
                               test_sizes=train_sizes if fixed else sizes)
             for path in checkpoints:
