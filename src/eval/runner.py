@@ -93,7 +93,7 @@ def checkpoint_epochs(run_dir: Path) -> list[Path]:
 
 
 def checkpoint_env_steps(path: Path) -> int | None:
-    """Environment steps recorded by scripts/train.py, when available."""
+    """Total environment steps (including any initial checkpoint), when recorded."""
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    steps = checkpoint.get("env_steps")
+    steps = checkpoint.get("total_env_steps", checkpoint.get("env_steps"))
     return int(steps) if steps is not None else None

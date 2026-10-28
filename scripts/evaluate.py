@@ -13,7 +13,7 @@ checkpoints are searched one level down, so a sweep output folder works too.
    size. Policies tied to a fixed train count (independent networks) are
    tested only at their training size.
 
-Writes <run>/evaluation.csv. Use scripts.compare to build tables and charts.
+Writes <run>/evaluation.csv. Use scripts.html_report to build tables and charts.
 """
 
 import argparse

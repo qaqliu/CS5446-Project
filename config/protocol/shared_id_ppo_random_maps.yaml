@@ -82,3 +82,10 @@ visualize_dir: null
 training_maps:
   generator: competition
   mode: random
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Shared PPO + train ID, 3M
+  group: 'Network (Task 1: shared vs independent)'
+  order: 1
+  changes:
+    Network: Shared MLP 64-64 + train ID

@@ -71,6 +71,20 @@ wandb:
 
 也可以先执行 `wandb login`，再将 `api_key` 设为 `null`，使用已有登录信息。API key 仅用于本地认证，不要提交到公开仓库。不使用在线日志时设置 `wandb.enabled: false`；没有 CUDA 的机器需要把 `trainer.device` 改成 `cpu`。
 
+### 统一评估、实验与结果
+
+所有方法在同一组没见过的比赛地图上评估（5 到 100 辆车），用验证集选 checkpoint。实验配方在 `config/protocol/`，训练和评估：
+
+```bash
+python -m scripts.train --config config/protocol/shared_ppo_random_maps.yaml --seed 42 --out results/runs/shared_ppo_random_maps_seed42
+python -m scripts.evaluate results/runs/shared_ppo_random_maps_seed42
+```
+
+- 训练命令、实验配方、继续训练、已训练模型的下载和使用：[technical_guide/experiments/1.training_and_checkpoints.md](technical_guide/experiments/1.training_and_checkpoints.md)
+- 评估协议和评估命令：[technical_guide/evaluation/1.protocol.md](technical_guide/evaluation/1.protocol.md)
+- 已训练模型清单：[docs/checkpoints.md](docs/checkpoints.md)
+- 当前结果（方法、训练配置、图表）：[docs/report/README.md](docs/report/README.md)
+
 ## 仓库结构
 
 代码按职责分为模型、agent、奖励和训练四层：模型负责神经网络计算，agent 负责组织各列车的模型与动作选择，奖励组件定义环境反馈，trainer 负责采样和参数更新。配置文件决定各层采用的实现和参数，入口脚本将它们组装成一次实验。
@@ -229,6 +243,20 @@ python visualize_result.py --fps 7
 All three scripts accept `--config` and default to `config/policy/single_map/ppo_demo_no_intermediate_stops.yaml`. The environment uses Python 3.11, Flatland 4.3.0, PyTorch 2.8.0, TorchRL 0.9.2, and TensorDict 0.9.1. Linux/Windows use CUDA 12.8 PyTorch wheels; set `trainer.device: cpu` for CPU execution. Before enabling W&B, replace the `[YOUR_...]` placeholders in `wandb.api_key`, `wandb.project`, and `wandb.entity` with your API key, project name, and username or team name. Remove the square brackets and supply string values, as shown in the YAML example above: unquoted bracketed placeholders are parsed as lists. `wandb.name` sets the run display name, and `wandb.interval` sets the logging interval in outer epochs. Alternatively, run `wandb login` and set `api_key: null` to use existing credentials. Keep real API keys out of public commits. Set `wandb.enabled: false` to disable online logging.
 
 Map previews are saved to `visualize_dir/map_preview.png`. Policy visualization loads `<total_epochs>.pt`, falling back to the largest numeric checkpoint filename, and writes `visualize_dir/<epoch>.mp4`. It uses the saved model architecture and weights with the current YAML scenario, which must provide compatible observations.
+
+### Evaluation, experiments, and results
+
+Every method is scored on the same unseen competition maps (5 to 100 trains), with checkpoints selected on separate validation maps. Recipes live in `config/protocol/`:
+
+```bash
+python -m scripts.train --config config/protocol/shared_ppo_random_maps.yaml --seed 42 --out results/runs/shared_ppo_random_maps_seed42
+python -m scripts.evaluate results/runs/shared_ppo_random_maps_seed42
+```
+
+- Training commands, recipes, continuing training, and using the trained checkpoints: [technical_guide/experiments/1.training_and_checkpoints.md](technical_guide/experiments/1.training_and_checkpoints.md#english)
+- Evaluation protocol and commands: [technical_guide/evaluation/1.protocol.md](technical_guide/evaluation/1.protocol.md#english)
+- List of trained checkpoints: [docs/checkpoints.md](docs/checkpoints.md)
+- Current results (methods, training configs, charts): [docs/report/README.md](docs/report/README.md)
 
 ## Repository and design
 

@@ -79,3 +79,10 @@ visualize_dir: null
 training_maps:
   generator: competition
   mode: random
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Shared PPO, champion reward, 3M
+  group: Reward
+  order: 1
+  changes:
+    Reward: Champion
