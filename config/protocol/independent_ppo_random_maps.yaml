@@ -80,3 +80,10 @@ visualize_dir: null
 training_maps:
   generator: competition
   mode: random
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Independent PPO, 3M
+  group: 'Network (Task 1: shared vs independent)'
+  order: 2
+  changes:
+    Network: One MLP 64-64 per train

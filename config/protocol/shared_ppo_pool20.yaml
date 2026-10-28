@@ -81,3 +81,10 @@ training_maps:
   generator: competition
   mode: pool
   pool_size: 20
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Shared PPO, 20-map pool, 3M
+  group: Training-map strategy
+  order: 2
+  changes:
+    Training maps: Pool of 20 maps

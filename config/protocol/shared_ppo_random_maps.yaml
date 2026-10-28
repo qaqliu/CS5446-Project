@@ -80,3 +80,8 @@ visualize_dir: null
 training_maps:
   generator: competition
   mode: random
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Shared PPO, random maps, 3M
+  group: Reference
+  order: 0

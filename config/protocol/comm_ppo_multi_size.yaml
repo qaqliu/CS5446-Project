@@ -91,3 +91,14 @@ training_maps:
   - 5
   - 10
   - 20
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Communication, multi-size (5/10/20)
+  group: Communication (teammate recipe)
+  order: 3
+  changes:
+    Network: Attention communication
+    Trainer: ppo (episodes), lr 1e‑5
+    Reward: Champion
+    Train sizes: 5, 10, 20 mixed
+    Entropy: 0.01 grouped

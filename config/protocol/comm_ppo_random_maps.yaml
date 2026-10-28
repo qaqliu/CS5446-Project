@@ -87,3 +87,14 @@ visualize_dir: null
 training_maps:
   generator: competition
   mode: random
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Communication + grouped entropy
+  group: Communication (teammate recipe)
+  order: 1
+  changes:
+    Network: Attention communication
+    Trainer: ppo (episodes), lr 1e‑5
+    Reward: Champion
+    Entropy: 0.01 grouped
+  budget: 7500 episodes
