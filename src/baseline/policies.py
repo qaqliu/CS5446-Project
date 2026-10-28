@@ -91,22 +91,24 @@ class ShortestPathPolicy:
         return actions
 
 
-class DepartureGatedShortestPathPolicy(ShortestPathPolicy):
-    """Shortest-path routing with a rule-based departure schedule.
+class DepartureCap:
+    """Wrap any policy with a rule-based departure schedule.
 
     The winning NeurIPS 2020 RL teams all limited how many trains are on the
     map at once. Trains ready to depart are considered in order of their
     latest arrival; one is released only if fewer than max_active trains are
     on the map, its origin is free, and no train on the map faces it on the
-    first `lookahead` cells of its shortest path.
+    first `lookahead` cells of its shortest path. All other actions (routing,
+    stopping) come from the wrapped policy.
     """
 
-    def __init__(self, max_active: int = 4, lookahead: int = 20) -> None:
+    def __init__(self, policy, max_active: int = 4, lookahead: int = 20) -> None:
+        self.policy = policy
         self.max_active = max_active
         self.lookahead = lookahead
 
     def __call__(self, env, observations, infos, masks, decisions) -> Actions:
-        actions = super().__call__(env, observations, infos, masks, decisions)
+        actions = self.policy(env, observations, infos, masks, decisions)
         on_map = {
             a.current_configuration[0]: a.current_configuration[1]
             for a in env.agents
@@ -132,3 +134,10 @@ class DepartureGatedShortestPathPolicy(ShortestPathPolicy):
                 active += 1
                 on_map[origin[0]] = origin[1]
         return actions
+
+
+class DepartureGatedShortestPathPolicy(DepartureCap):
+    """Shortest-path routing with the rule-based departure schedule."""
+
+    def __init__(self, max_active: int = 4, lookahead: int = 20) -> None:
+        super().__init__(ShortestPathPolicy(), max_active, lookahead)

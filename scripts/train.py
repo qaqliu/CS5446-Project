@@ -12,9 +12,14 @@ things around it without touching shared code:
          pool_size: 20            # pool mode: maps drawn from this many seeds
          sizes: [5, 10, 20]       # optional: new train count each episode (episode-based `ppo` only)
    Pool seeds are 100000 + 1000 * training_seed + i, disjoint from held-out seeds.
-2. Environment steps are counted and saved in every checkpoint (`env_steps`),
-   so methods can be compared at equal interaction budgets.
+2. Environment steps are counted and saved in every checkpoint (`env_steps`,
+   this run; `total_env_steps`, including any initial checkpoint), so methods
+   can be compared at equal interaction budgets.
 3. Training refuses to start if it would use validation or test map seeds.
+4. Optional `init_from: path/to/<epoch>.pt` starts from a trained checkpoint
+   (actor and critic weights; `{seed}` in the path is replaced by the training
+   seed). Its training sizes are recorded as training_maps.curriculum_sizes,
+   so checkpoint selection validates on every size in the policy's history.
 
 Add your own strategy by extending `make_reset` (it decides which map each
 episode uses); everything else, including evaluation, stays the same.
@@ -70,6 +75,23 @@ def prepare_config(config: dict, seed: int | None, out: Path | None) -> dict:
         config["save_dir"] = str(out)
         config["visualize_dir"] = str(out / "visualize")
     return config
+
+
+def apply_init_from(config: dict) -> dict | None:
+    """Resolve init_from and record the parent's training history; returns the checkpoint."""
+    path = config.get("init_from")
+    if not path:
+        return None
+    path = Path(str(path).format(seed=config["trainer"]["training_seed"])).expanduser()
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    from src.eval.protocol import training_sizes
+    maps = config.get("training_maps") or {}
+    own = maps.get("sizes") or [config["number_of_agents"]]
+    maps["curriculum_sizes"] = sorted(set(training_sizes(checkpoint["config"])) | set(own))
+    config["training_maps"] = maps
+    config["init_from"] = str(path)
+    config["init_env_steps"] = int(checkpoint.get("total_env_steps", checkpoint.get("env_steps")) or 0)
+    return checkpoint
 
 
 def _resize(env: RailEnv, config: dict, trains: int) -> None:
@@ -128,6 +150,7 @@ def main() -> None:
     args = parser.parse_args()
     config = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     config = prepare_config(config, args.seed, args.out)
+    init = apply_init_from(config)
     problems = check_training_config(config)
     if problems:
         raise SystemExit("; ".join(problems))
@@ -143,12 +166,17 @@ def main() -> None:
 
     def save_with_steps(obj, *a, **k):
         if isinstance(obj, dict) and "actor" in obj and "config" in obj:
-            obj = dict(obj, env_steps=counter["steps"])
+            obj = dict(obj, env_steps=counter["steps"],
+                       total_env_steps=counter["steps"] + config.get("init_env_steps", 0))
         return save(obj, *a, **k)
     policy_trainer.torch.save = save_with_steps
 
     set_random_seed(config["trainer"]["training_seed"])
     actor, critic = build_agents(config)
+    if init is not None:
+        actor.load_state_dict(init["actor"])
+        critic.load_state_dict(init["critic"])
+        print(f"Initialized from {config['init_from']} ({config['init_env_steps']} env steps)", flush=True)
     trainer = build_trainer(config["trainer"]["type"], env=env, actor=actor, critic=critic, config=config)
     print(f"Training {config['trainer']['type']} | maps {config.get('training_maps')} | "
           f"save_dir {config['save_dir']}", flush=True)

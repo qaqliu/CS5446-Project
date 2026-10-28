@@ -1,0 +1,93 @@
+# Shared evaluation protocol recipe. Train: python -m scripts.train --config config/protocol/shared_ppo_15M_curriculum10.yaml --seed 42 --out DIR
+# Needs the 10M checkpoints: download them into checkpoints/ (see technical_guide/experiments/1.training_and_checkpoints.md).
+# Curriculum: continue the 10M model ~5M steps on 10-train maps; same LR/entropy decay (~15M total).
+random_map: false
+map_seed: null
+width: 30
+height: 30
+max_num_cities: 6
+grid_mode: true
+max_rails_between_cities: 3
+max_rail_pairs_in_city: 3
+max_episode_steps: null
+number_of_agents: 10
+speed_ratio_map:
+  1.0: 1.0
+intermediate_stops:
+  enabled: false
+  line_length: 2
+observation:
+  type: flattened_normalized_tree
+  max_depth: 3
+  observation_radius: 2
+  predictor: null
+reward:
+  type: champion_stuck
+  config:
+    progress_coef: 0.01
+    deadlock_penalty: -5.0
+    finish_bonus: 10.0
+    stuck_penalty: -0.01
+actor:
+  type: shared
+  model:
+    name: mlp_policy_demo
+    input_dim: 1020
+    hidden_dims:
+    - 64
+    - 64
+critic:
+  type: shared
+  model:
+    name: mlp_critic_demo
+    input_dim: 1020
+    hidden_dims:
+    - 64
+    - 64
+trainer:
+  type: ppo_demo
+  training_seed: 42
+  device: cpu
+rollout_steps: 1024
+update_epochs: 4
+batch_size: 512
+gamma: 0.99
+gae_lambda: 0.95
+normalize_advantage: true
+total_epochs: 4900
+lr_schedule: linear
+actor_lr: 0.0003
+critic_lr: 0.0003
+clip_epsilon: 0.2
+entropy_coef: 0.003
+entropy_schedule: cosine
+entropy_coef_final: 0.001
+max_grad_norm: 0.5
+target_kl: null
+log_interval: 1
+wandb:
+  enabled: false
+  interval: 10
+  api_key:
+  - YOUR_WANDB_API_KEY
+  project:
+  - YOUR_WANDB_PROJECT_NAME
+  entity:
+  - YOUR_WANDB_ENTITY_NAME
+  name: ppo_demo_no_intermediate_stops
+save_dir: null
+checkpoint_interval: 490
+visualize_dir: null
+training_maps:
+  generator: competition
+  mode: random
+init_from: checkpoints/shared_ppo_random_maps_10M/seed{seed}/final.pt
+# Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
+report:
+  label: Shared PPO, 15M (10M + 5M curriculum at 10 trains)
+  group: Training budget and schedule
+  order: 3
+  changes:
+    Train sizes: 5, then 10
+    LR schedule: Linear decay to 0
+    Entropy: 0.003 → 0.001

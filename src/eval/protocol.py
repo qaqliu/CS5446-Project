@@ -72,9 +72,15 @@ def protocol_config(policy_config: dict, trains: int, map_seed: int) -> dict:
 
 
 def training_sizes(policy_config: dict) -> tuple[int, ...]:
-    """Train counts a policy was trained on; checkpoint selection uses only these."""
-    sizes = (policy_config.get("training_maps") or {}).get("sizes")
-    return tuple(sizes) if sizes else (int(policy_config["number_of_agents"]),)
+    """Train counts a policy was trained on, including earlier curriculum stages.
+
+    Checkpoint selection validates on all of these (so a later stage cannot be
+    selected for forgetting an earlier size); other sizes stay test-only.
+    """
+    maps = policy_config.get("training_maps") or {}
+    sizes = set(maps.get("sizes") or [int(policy_config["number_of_agents"])])
+    sizes |= set(maps.get("curriculum_sizes") or [])
+    return tuple(sorted(sizes))
 
 
 def check_training_config(config: dict) -> list[str]:
