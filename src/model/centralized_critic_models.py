@@ -10,6 +10,7 @@ number of trains and the same weights can be tested at other sizes.
 from collections.abc import Sequence
 from typing import Any
 
+import numpy as np
 import torch
 from torch import Tensor, nn
 
@@ -42,13 +43,18 @@ class MLPCentralizedCritic(nn.Module):
         """Return {train: value of shape (1,)}, preserving gradients. Missing observations are zeros."""
         if team_value:
             raise ValueError("mlp_critic_centralized returns per-train values; set team_value: false.")
-        parameter = next(self.parameters())
         agent_ids = sorted(observations)
-        local = torch.stack([
-            parameter.new_zeros(self.input_dim) if observations[i] is None
-            else torch.as_tensor(observations[i], dtype=parameter.dtype, device=parameter.device)
-            for i in agent_ids
-        ])
-        context = local.mean(dim=0, keepdim=True).expand_as(local)
-        values = self.network(torch.cat([local, context], dim=-1))
+        values = self.forward_batch([observations])[0]
         return {i: values[row] for row, i in enumerate(agent_ids)}
+
+    def forward_batch(self, observations: Sequence[dict[int, Any]]) -> Tensor:
+        """Values of shape [time, train, 1] for a list of per-step observation dicts (trains in ID order)."""
+        parameter = next(self.parameters())
+        agent_ids = sorted(observations[0])
+        zeros = np.zeros(self.input_dim, dtype=np.float32)
+        local = torch.from_numpy(np.stack([
+            np.stack([zeros if step[i] is None else np.asarray(step[i], dtype=np.float32) for i in agent_ids])
+            for step in observations
+        ])).to(device=parameter.device, dtype=parameter.dtype)
+        context = local.mean(dim=1, keepdim=True).expand_as(local)
+        return self.network(torch.cat([local, context], dim=-1))
