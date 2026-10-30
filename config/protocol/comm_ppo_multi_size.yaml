@@ -101,4 +101,4 @@ report:
     Trainer: ppo (episodes), lr 1e‑5
     Reward: Champion
     Train sizes: 5, 10, 20 mixed
-    Entropy: 0.01 grouped
+    Entropy: 0.01 constant + grouped

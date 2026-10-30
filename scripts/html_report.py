@@ -46,7 +46,7 @@ BASELINES = {
 DIMENSIONS = ["Network", "Trainer", "Training maps", "Train sizes", "LR schedule", "Entropy", "Reward"]
 REFERENCE = "shared_ppo_random_maps"
 _REF = dict(zip(DIMENSIONS, ["Shared MLP 64-64", "ppo_demo, lr 3e‑4", "New random map each episode", "5",
-                             "Constant", "0.01", "Champion + stuck"]))
+                             "Constant", "0.01 → 0.001", "Champion + stuck"]))
 GROUPS = ["Reference", "Training budget and schedule", "Training-map strategy", "Reward",
           "Network (Task 1: shared vs independent)", "Communication (teammate recipe)"]
 GROUP_SIZES = {"Training budget and schedule": [5, 10, 20], "Training-map strategy": [5, 10, 20], "Reward": [5, 10, 20],
