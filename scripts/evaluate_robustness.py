@@ -8,7 +8,8 @@ breakdowns that start on average once every `interval` steps per train and
 last 20-50 steps (the NeurIPS 2020 competition's duration range). Every
 method sees the same breakdown random numbers on a given map and episode
 (3 episodes per map). Methods: prioritized planning, shortest path,
-shortest path + departure cap (cap as chosen on validation), each RL run's
+shortest path + departure cap (cap as chosen on validation), prioritized planning that
+re-plans all trains at each new breakdown, each RL run's
 validation-selected checkpoint (sampled policy), and its departure-cap hybrid
 when scripts.evaluate_hybrid has scored it. Writes <out>/evaluation.csv with a
 malfunction_interval column.
@@ -70,12 +71,14 @@ def main() -> None:
     parser.add_argument("--sizes", type=int, nargs="+", default=[5, 10, 20])
     parser.add_argument("--intervals", type=int, nargs="+", default=[400, 200, 100])
     parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--baseline-names", nargs="*",
+                        default=["prioritized_planning", "prioritized_planning_replan", "shortest_path", "departure_cap"])
     parser.add_argument("--out", type=Path, default=Path("results/robustness"))
     args = parser.parse_args()
     # (run name, checkpoint or None, {trains: cap} or None, sizes)
     base = pd.read_csv(args.baselines.expanduser() / "evaluation.csv")
-    methods = [("prioritized_planning", None, None, args.sizes), ("shortest_path", None, None, args.sizes),
-               ("departure_cap", None, chosen_caps(base, "departure_cap"), args.sizes)]
+    methods = [(name, None, chosen_caps(base, name) if name == "departure_cap" else None, args.sizes)
+               for name in args.baseline_names]
     for run in [r.expanduser() for r in args.runs]:
         frame = pd.read_csv(run / "evaluation.csv")
         epoch = int(frame[(frame["split"] == "test") & (frame["selection"] == "best_val")]["epoch"].iloc[0])

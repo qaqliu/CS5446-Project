@@ -200,3 +200,40 @@ class PrioritizedPlanningPolicy:
                 action = int(np.flatnonzero(mask.numpy())[0])
             actions[handle] = action
         return actions
+
+
+class ReplanningPrioritizedPlanningPolicy(PrioritizedPlanningPolicy):
+    """Prioritized planning that re-plans every train whenever a new breakdown starts.
+
+    The base policy only repairs the plan of a train that deviates from it, so
+    other trains keep reservations that a broken train now blocks. Here, when
+    any train starts a malfunction, all reservations are dropped and every train
+    is planned again in priority order from its current state; a broken train
+    holds its cell until it can move again. Without malfunctions this behaves
+    exactly like the base policy.
+    """
+
+    def _replan_all(self, env, t: int, broken: dict[int, int]) -> None:
+        episode = self._episode
+        self._reset(env)
+        self._episode = episode
+        for agent in self._order(env):
+            actual = self._actual(agent)
+            if actual == "done":
+                continue
+            wait = broken.get(agent.handle, 0)
+            plan = self._plan(env, agent, actual, t + wait)
+            if plan is None:
+                plan = {step: actual for step in range(t + wait, self.t_max + 1)}
+                self.planned_failures.add(agent.handle)
+            plan.update({step: actual for step in range(t, t + wait)})
+            self._reserve(agent.handle, plan)
+
+    def __call__(self, env, observations, infos, masks, decisions) -> dict[int, int]:
+        t = env._elapsed_steps
+        broken = {handle: int(steps) for handle, steps in infos["malfunction"].items() if steps > 0}
+        new_episode = self._episode is None or self._episode[0] != id(env) or t == 0 and self._episode[1] != 0 or t < self._episode[1]
+        if not new_episode and set(broken) - getattr(self, "_broken", set()):
+            self._replan_all(env, t, broken)
+        self._broken = set(broken)
+        return super().__call__(env, observations, infos, masks, decisions)
