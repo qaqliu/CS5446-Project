@@ -12,7 +12,10 @@ import importlib
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
 import torch
+from flatland.envs import malfunction_effects_generators as mfg
+from flatland.envs.malfunction_generators import MalfunctionParameters, ParamMalfunctionGen
 
 from src.eval.metrics import EpisodeTracker
 from src.reward.deadlock import DeadlockChecker
@@ -38,13 +41,32 @@ class ActorPolicy:
         return actions
 
 
+def add_malfunctions(env, malfunction: dict) -> None:
+    """Enable random breakdowns (robustness tests only; the protocol itself has none).
+
+    malfunction = {"interval": mean steps between breakdowns per train, "min_duration", "max_duration",
+    "seed"}. The seed fixes the breakdown random numbers, so every method sees the same draws on a given
+    map and episode.
+    """
+    generator = ParamMalfunctionGen(MalfunctionParameters(
+        1.0 / malfunction["interval"], malfunction["min_duration"], malfunction["max_duration"]))
+    generator.generate_rand_numbers(np.random.RandomState(malfunction["seed"]))
+    env.malfunction_generator = generator
+    env.malfunction_process_data = generator.get_process_data()
+    env.effects_generator = mfg.MalfunctionEffectsGenerator(generator)
+
+
 def play(config: dict, policy) -> dict:
     """One episode on the scenario defined by `config`; returns episode metrics.
+
+    An optional config["malfunction"] (see add_malfunctions) enables breakdowns.
 
     deadlock_rate uses the team's DeadlockChecker (as in training logs);
     strict_deadlock_rate is the stricter cycle detector in src.eval.metrics.
     """
     env = build_env(config)
+    if config.get("malfunction"):
+        add_malfunctions(env, config["malfunction"])
     observations, infos = reset_env(env, config)
     tracker = EpisodeTracker(env)
     checker = getattr(env.rewards, "deadlock_checker", None)
