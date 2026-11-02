@@ -12,6 +12,12 @@ Held-out completion at each train count (sampled policy, mean over 3 seeds). Hyb
 | Method | Folder | Recipe | Seeds | Selected epoch per seed | Env steps (selected / trained) | 5 trains | 10 trains | 20 trains | 50 trains | 100 trains |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Shared PPO, random maps, 3M | `shared_ppo_random_maps/` | `config/protocol/shared_ppo_random_maps.yaml` | 3 | 2700, 3000, 1800 | 2.6M / 3.1M | 71% | 51% | 25% | 9% | – |
+| Shared PPO, 3M, trained at 10 trains | `shared_ppo_random_maps_n10/` | `config/protocol/shared_ppo_random_maps_n10.yaml` | 3 | 3000, 2700, 2700 | 2.9M / 3.1M | 66% | 51% | 28% | 10% | – |
+| Independent PPO, 3M, trained at 10 trains | `independent_ppo_random_maps_n10/` | `config/protocol/independent_ppo_random_maps_n10.yaml` | 3 | 3000, 2700, 2700 | 2.9M / 3.1M | – | 22% | – | – | – |
+| MAPPO-style (centralized critic), 3M, trained at 10 trains | `mappo_random_maps_n10/` | `config/protocol/mappo_random_maps_n10.yaml` | 3 | 2400, 3000, 2400 | 2.7M / 3.1M | 68% | 57% | 33% | 12% | – |
+| Shared PPO, 3M, trained at 20 trains | `shared_ppo_random_maps_n20/` | `config/protocol/shared_ppo_random_maps_n20.yaml` | 3 | 2400, 3000, 2100 | 2.6M / 3.1M | 63% | 48% | 36% | 12% | – |
+| Independent PPO, 3M, trained at 20 trains | `independent_ppo_random_maps_n20/` | `config/protocol/independent_ppo_random_maps_n20.yaml` | 3 | 1500, 2100, 3000 | 2.3M / 3.1M | – | – | 9% | – | – |
+| MAPPO-style (centralized critic), 3M, trained at 20 trains | `mappo_random_maps_n20/` | `config/protocol/mappo_random_maps_n20.yaml` | 3 | 300, 900, 600 | 0.6M / 3.1M | 6% | 5% | 4% | 1% | – |
 | Shared PPO, random maps, 10M | `shared_ppo_random_maps_10M/` | `config/protocol/shared_ppo_random_maps_10M.yaml` | 3 | 5000, 5000, 4000 | 4.8M / 10.2M | 83% | 64% | 38% | 14% | 7% |
 | Shared PPO, 15M (10M + 5M with LR decay) | `shared_ppo_15M_lr_decay/` | `config/protocol/shared_ppo_15M_lr_decay.yaml` | 3 | 2450, 4900, 4900 | 14.4M / 15.3M | 90% | 78% | 45% | 15% | – |
 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) | `shared_ppo_15M_curriculum10/` | `config/protocol/shared_ppo_15M_curriculum10.yaml` | 3 | 2940, 3920, 4410 | 14.1M / 15.3M | 90% | 80% | 47% | 17% | – |
@@ -20,7 +26,12 @@ Held-out completion at each train count (sampled policy, mean over 3 seeds). Hyb
 | Shared PPO, 20-map pool, 3M | `shared_ppo_pool20/` | `config/protocol/shared_ppo_pool20.yaml` | 3 | 2100, 3000, 1800 | 2.4M / 3.1M | 57% | 40% | 21% | 8% | – |
 | Shared PPO, champion reward, 3M | `shared_ppo_random_maps_champion_reward/` | `config/protocol/shared_ppo_random_maps_champion_reward.yaml` | 3 | 3000, 3000, 2400 | 2.9M / 3.1M | 74% | 61% | 31% | 11% | – |
 | Shared PPO + train ID, 3M | `shared_id_ppo_random_maps/` | `config/protocol/shared_id_ppo_random_maps.yaml` | 3 | 3000, 2100, 2700 | 2.7M / 3.1M | 76% | – | – | – | – |
+| Shared PPO + train ID, 10M | `shared_id_ppo_random_maps_10M/` | `config/protocol/shared_id_ppo_random_maps_10M.yaml` | 3 | 4200, 7000, 3500 | 8.1M / 10.2M | 85% | – | – | – | – |
+| Shared PPO + train ID, 15M (10M + 5M with LR decay) | `shared_id_ppo_15M_lr_decay/` | `config/protocol/shared_id_ppo_15M_lr_decay.yaml` | 3 | 4900, 3430, 4900 | 14.8M / 15.3M | 88% | – | – | – | – |
 | Independent PPO, 3M | `independent_ppo_random_maps/` | `config/protocol/independent_ppo_random_maps.yaml` | 3 | 2100, 3000, 2100 | 2.5M / 3.1M | 39% | – | – | – | – |
+| Independent PPO, 10M | `independent_ppo_random_maps_10M/` | `config/protocol/independent_ppo_random_maps_10M.yaml` | 3 | 2100, 6300, 2800 | 6.9M / 10.2M | 42% | – | – | – | – |
+| Independent PPO, 15M (10M + 5M with LR decay) | `independent_ppo_15M_lr_decay/` | `config/protocol/independent_ppo_15M_lr_decay.yaml` | 3 | 4900, 3430, 3430 | 14.3M / 15.3M | 49% | – | – | – | – |
+| MAPPO-style (centralized critic), 3M | `mappo_random_maps/` | `config/protocol/mappo_random_maps.yaml` | 3 | 3000, 2700, 2700 | 2.9M / 3.1M | 79% | 53% | 26% | 11% | – |
 | Communication + grouped entropy | `comm_ppo_random_maps/` | `config/protocol/comm_ppo_random_maps.yaml` | 3 | 7500, 6000, 7500 | – | 66% | 42% | 19% | 8% | – |
 | Communication, plain entropy | `comm_ppo_random_maps_no_grouped_entropy/` | `config/protocol/comm_ppo_random_maps_no_grouped_entropy.yaml` | 3 | 4500, 5250, 6750 | – | 64% | 42% | 17% | 7% | – |
 | Communication, multi-size (5/10/20) | `comm_ppo_multi_size/` | `config/protocol/comm_ppo_multi_size.yaml` | 3 | 5250, 7500, 6750 | 2.9M / 3.3M | 69% | 47% | 25% | 10% | – |
