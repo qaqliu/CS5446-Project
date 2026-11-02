@@ -29,10 +29,13 @@ import yaml
 
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 SURFACE, TEXT, MUTED, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
-METRICS = ["completion_rate", "competition_score", "deadlock_rate", "delay_gini", "makespan"]
+METRICS = ["completion_rate", "competition_score", "deadlock_rate", "delay_gini", "makespan", "mean_travel_time"]
 RECIPE_DIR = Path(__file__).resolve().parent.parent / "config" / "protocol"
 # Baselines have no recipe: label, kind, what it does, tuning.
 BASELINES = {
+    "prioritized_planning_replan": ("Prioritized planning, re-plans at breakdowns", "Centralized planner",
+                                    "As prioritized planning, but re-plans every train whenever a breakdown starts "
+                                    "(robustness test only).", "None"),
     "prioritized_planning": ("Prioritized planning (centralized reference)", "Centralized planner",
                              "Plans trains one at a time with A* in space-time, reserving cells so later trains avoid "
                              "earlier ones. Sees the whole map and all trains (upper reference).", "None"),
@@ -47,15 +50,19 @@ DIMENSIONS = ["Network", "Trainer", "Training maps", "Train sizes", "LR schedule
 REFERENCE = "shared_ppo_random_maps"
 _REF = dict(zip(DIMENSIONS, ["Shared MLP 64-64", "ppo_demo, lr 3e‑4", "New random map each episode", "5",
                              "Constant", "0.01 → 0.001", "Champion + stuck"]))
-GROUPS = ["Reference", "Training budget and schedule", "Training-map strategy", "Reward",
-          "Network (Task 1: shared vs independent)", "Communication (teammate recipe)"]
+GROUPS = ["Reference", "Scaling (trained at each size)", "Training budget and schedule", "Training-map strategy", "Reward",
+          "Network (Task 1: shared vs independent)", "Centralized critic (MAPPO-style)", "Communication (teammate recipe)"]
+# Groups shown as a combined table (special_tables) instead of one row per recipe.
+SPECIAL = {"Scaling (trained at each size)": "scaling", "Network (Task 1: shared vs independent)": "task1"}
 GROUP_SIZES = {"Training budget and schedule": [5, 10, 20], "Training-map strategy": [5, 10, 20], "Reward": [5, 10, 20],
-               "Communication (teammate recipe)": [5, 10, 20]}
+               "Communication (teammate recipe)": [5, 10, 20], "Centralized critic (MAPPO-style)": [5, 10, 20]}
 GROUP_QUESTIONS = {
     "Training budget and schedule": "Does more training help, and does decaying the learning rate or continuing on larger maps (curriculum) help more?",
     "Training-map strategy": "Is it better to train on one map, a fixed pool, or a new random map every episode?",
     "Reward": "Does the extra stuck penalty matter?",
     "Network (Task 1: shared vs independent)": "One network shared by all trains, shared with a train ID, or one network per train?",
+    "Centralized critic (MAPPO-style)": "Does a critic that sees all trains during training help the shared policy? "
+                                        "Tested zero-shot at larger sizes like the reference; see the scaling section for training at each size.",
     "Communication (teammate recipe)": "Does attention-based communication between trains help, and does grouped entropy or multi-size training help it? "
                                        "(Different trainer and learning rate from the reference, so compare the communication rows with each other first.)",
 }
@@ -344,16 +351,17 @@ def html_table(table: pd.DataFrame, methods: list[str] | None = None) -> str:
                 if np.isnan(mean):
                     cells.append("–")
                     continue
-                text = f"{mean:.0f}" if m == "makespan" else (f"{mean:.0%}" if m in ("completion_rate", "deadlock_rate") else f"{mean:.2f}")
+                steps = m in ("makespan", "mean_travel_time")
+                text = f"{mean:.0f}" if steps else (f"{mean:.0%}" if m in ("completion_rate", "deadlock_rate") else f"{mean:.2f}")
                 if not np.isnan(std):
-                    text += f" <span class='sd'>± {std:.0f}</span>" if m == "makespan" else (
+                    text += f" <span class='sd'>± {std:.0f}</span>" if steps else (
                         f" <span class='sd'>± {std:.0%}</span>" if m in ("completion_rate", "deadlock_rate") else f" <span class='sd'>± {std:.2f}</span>")
                 cells.append(text)
             key = "" if method in BASELINES else f"<br><code class='key'>{method}</code>"
             rows.append(f"<tr><td>{html.escape(label(method))}{key}</td><td>{int(row['seeds'].iloc[0])}</td>"
                         + "".join(f"<td>{c}</td>" for c in cells) + "</tr>")
         parts.append(f"<h4>{n} trains</h4><table><tr><th>Method</th><th>Seeds</th><th>Completion</th>"
-                     "<th>Competition score</th><th>Deadlock</th><th>Delay Gini</th><th>Makespan</th></tr>"
+                     "<th>Competition score</th><th>Deadlock</th><th>Delay Gini</th><th>Makespan</th><th>Mean travel time</th></tr>"
                      + "".join(rows) + "</table>")
     return "".join(parts)
 
@@ -395,6 +403,62 @@ def _cell(table: pd.DataFrame, method: str, trains: int, metric: str, std: bool 
     if np.isnan(mean):
         return "–"
     return f"{mean:.2f}" + (f" ± {sd:.2f}" if std and not np.isnan(sd) else "")
+
+
+SCALING = [("Shared PPO", {5: "shared_ppo_random_maps", 10: "shared_ppo_random_maps_n10", 20: "shared_ppo_random_maps_n20"}),
+           ("MAPPO-style (centralized critic)", {5: "mappo_random_maps", 10: "mappo_random_maps_n10", 20: "mappo_random_maps_n20"}),
+           ("Independent PPO", {5: "independent_ppo_random_maps", 10: "independent_ppo_random_maps_n10",
+                                20: "independent_ppo_random_maps_n20"})]
+TASK1 = [("Shared PPO", {"3M": "shared_ppo_random_maps", "10M": "shared_ppo_random_maps_10M", "15M": "shared_ppo_15M_lr_decay"}),
+         ("Shared PPO + train ID", {"3M": "shared_id_ppo_random_maps", "10M": "shared_id_ppo_random_maps_10M",
+                                    "15M": "shared_id_ppo_15M_lr_decay"}),
+         ("Independent PPO", {"3M": "independent_ppo_random_maps", "10M": "independent_ppo_random_maps_10M",
+                              "15M": "independent_ppo_15M_lr_decay"})]
+ROBUST = ["prioritized_planning", "prioritized_planning_replan", "departure_cap", "shared_ppo_15M_curriculum10_with_cap",
+          "shared_ppo_15M_curriculum10", "shortest_path"]
+
+
+def _both(table: pd.DataFrame, method: str, trains: int) -> str:
+    if (method, trains) not in table.index:
+        return "–"
+    return f"{_cell(table, method, trains, 'completion_rate', True)} ({_cell(table, method, trains, 'competition_score')})"
+
+
+def special_tables(data: pd.DataFrame, table: pd.DataFrame) -> dict[str, tuple[str, list[str], list[list[str]]]]:
+    """Tables that combine several recipes: name -> (intro, header, rows). Empty tables are left out."""
+    tables = {}
+    rows = [[name] + [_both(table, recipes[n], n) + f" `{recipes[n]}`" if (recipes[n], n) in table.index else "–"
+                      for n in (5, 10, 20)] for name, recipes in SCALING]
+    if any(c != "–" for r in rows for c in r[2:]):
+        tables["scaling"] = (
+            "Does cooperation help more as traffic grows? Each method is trained and tested at the same train count, "
+            "~3M steps each. Completion (mean ± std over 3 seeds) and competition score.",
+            ["Method", "5 trains", "10 trains", "20 trains"], rows)
+    rows = [[name] + [_both(table, recipes[b], 5) + f" `{recipes[b]}`" if (recipes[b], 5) in table.index else "–"
+                      for b in ("3M", "10M", "15M")] for name, recipes in TASK1]
+    if any(c != "–" for r in rows for c in r[2:]):
+        tables["task1"] = (
+            "Shared vs independent at equal budgets (5 trains). 10M and 15M use the same schedule for every method: "
+            "constant LR to 10M, then 5M with LR/entropy decay.",
+            ["Method", "3M steps", "10M steps", "15M steps"], rows)
+    rob = data[data["selection"] == "robustness"]
+    if not rob.empty:
+        intervals = sorted(rob["malfunction_interval"].unique(), reverse=True)
+        means = rob.groupby(["method", "trains", "malfunction_interval"])[["completion_rate", "competition_score"]].mean()
+        rows = []
+        for n in sorted(rob["trains"].unique()):
+            for m in ROBUST:
+                clean = "planning, no breakdowns" if m == "prioritized_planning_replan" else m
+                base = _cell(table, "prioritized_planning" if m == "prioritized_planning_replan" else m, n, "completion_rate")
+                cells = [f"{means.loc[(m, n, i)]['completion_rate']:.0%} ({means.loc[(m, n, i)]['competition_score']:.2f})"
+                         if (m, n, i) in means.index else "–" for i in intervals]
+                if any(c != "–" for c in cells):
+                    rows.append([str(n), named(m), base] + cells)
+        tables["robustness"] = (
+            "Test maps replayed with random breakdowns (20–50 steps, as in the NeurIPS 2020 competition); every method "
+            "sees the same breakdowns. Completion (competition score); no-breakdown column = the main results.",
+            ["Trains", "Method", "No breakdowns"] + [f"Breakdown every ~{int(i)} steps" for i in intervals], rows)
+    return tables
 
 
 def markdown_report(data: pd.DataFrame, table: pd.DataFrame) -> str:
@@ -477,7 +541,14 @@ def markdown_report(data: pd.DataFrame, table: pd.DataFrame) -> str:
                       [[named(m)] + [f"{_cell(table, m, n, 'completion_rate')} / {_cell(table, m, n, 'competition_score')}"
                                      if (m, n) in table.index else "–" for n in trains] for m in methods_in(MAIN)])]
     number = 2
+    special = special_tables(data, table)
     for group, recipes in RL_GROUPS[1:]:
+        if group in SPECIAL:
+            if SPECIAL[group] in special:
+                intro, header, rows = special[SPECIAL[group]]
+                out += [f"## {number}. {group}", "", intro, "", _md_table(header, rows)]
+                number += 1
+            continue
         methods = methods_in([REFERENCE] + list(recipes))
         if len(methods) < 2:
             continue
@@ -493,18 +564,24 @@ def markdown_report(data: pd.DataFrame, table: pd.DataFrame) -> str:
             "Delay Gini (lower = delay spread more evenly) / deadlock rate (share of trains ever deadlocked).", "",
             _md_table(["Method"] + [f"{n} trains" for n in trains],
                       [[named(m)] + [f"{_cell(table, m, n, 'delay_gini')} / {_cell(table, m, n, 'deadlock_rate')}"
-                                     if (m, n) in table.index else "–" for n in trains] for m in fair]),
-            f"## {number + 1}. Full tables", "",
+                                     if (m, n) in table.index else "–" for n in trains] for m in fair])]
+    if "robustness" in special:
+        intro, header, rows = special["robustness"]
+        number += 1
+        out += [f"## {number}. Robustness to breakdowns (Responsible AI)", "", intro, "", _md_table(header, rows)]
+    out += [f"## {number + 1}. Full tables", "",
             "Sampled policy, mean ± std over seeds. Deterministic-policy results are in each run's `evaluation.csv` and "
             "the HTML report.", ""]
     for n in trains:
         part = table.xs(n, level="trains").sort_values(("competition_score", "mean"), ascending=False)
         out += [f"### {n} trains", "",
-                _md_table(["Method", "Seeds", "Completion", "Competition score", "Deadlock", "Delay Gini", "Makespan"],
+                _md_table(["Method", "Seeds", "Completion", "Competition score", "Deadlock", "Delay Gini", "Makespan",
+                           "Mean travel time"],
                           [[named(m), int(row["seeds"].iloc[0]), _cell(table, m, n, "completion_rate", True),
                             _cell(table, m, n, "competition_score", True), _cell(table, m, n, "deadlock_rate", True),
                             _cell(table, m, n, "delay_gini", True),
-                            "–" if np.isnan(row[("makespan", "mean")]) else f"{row[('makespan', 'mean')]:.0f}"]
+                            "–" if np.isnan(row[("makespan", "mean")]) else f"{row[('makespan', 'mean')]:.0f}",
+                            "–" if np.isnan(row[("mean_travel_time", "mean")]) else f"{row[('mean_travel_time', 'mean')]:.0f}"]
                            for m, row in part.iterrows()])]
     return "\n".join(out)
 
@@ -544,7 +621,21 @@ def main() -> None:
         curves_chart(data, CURVES, "Validation score at 5 trains during training (band = seed min–max)"),
         "Validation maps are separate from test maps; each run's best validation checkpoint is the one tested."))
     number = 3
+    special = special_tables(data, table)
+
+    def table_html(header, rows):
+        cell = lambda c: html.escape(str(c)).replace("`", "")
+        return ("<table><tr>" + "".join(f"<th>{cell(h)}</th>" for h in header) + "</tr>"
+                + "".join("<tr>" + "".join(f"<td>{cell(c)}</td>" for c in row) + "</tr>" for row in rows) + "</table>")
+
     for group, recipes in RL_GROUPS[1:]:
+        if group in SPECIAL:
+            if SPECIAL[group] in special:
+                intro, header, rows = special[SPECIAL[group]]
+                sections.append(f"<h2>{number}. {html.escape(group)}</h2><p class='lead'>{html.escape(intro)}</p>"
+                                + table_html(header, rows))
+                number += 1
+            continue
         methods = [REFERENCE] + list(recipes)
         sizes = GROUP_SIZES.get(group, [5])
         png = bars_chart(table, methods, sizes, f"Held-out completion: {group.lower()}")
@@ -558,6 +649,11 @@ def main() -> None:
         grouped_chart(table, FAIRNESS,
                       [("delay_gini", "Delay inequality (Gini, lower = fairer)"), ("deadlock_rate", "Deadlock rate (safety)")]),
         "Delay Gini measures how unevenly delay is spread across trains; deadlock rate is the share of trains ever deadlocked."))
+    if "robustness" in special:
+        number += 1
+        intro, header, rows = special["robustness"]
+        sections.append(f"<h2>{number}. Robustness to breakdowns (Responsible AI)</h2><p class='lead'>{html.escape(intro)}</p>"
+                        + table_html(header, rows))
     sections.append(f"<h2>{number + 1}. Full tables</h2><details open><summary>Sampled policy (headline)</summary>"
                     + html_table(table) + "</details><details><summary>Deterministic policy</summary>"
                     + html_table(deterministic) + "</details>")

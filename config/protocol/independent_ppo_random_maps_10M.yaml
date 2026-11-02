@@ -86,7 +86,7 @@ init_from: checkpoints/independent_ppo_random_maps/seed{seed}/final.pt
 # Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
 report:
   label: Independent PPO, 10M
-  group: Training budget and schedule
-  order: 10
+  group: 'Network (Task 1: shared vs independent)'
+  order: 6
   changes:
     Network: One MLP 64-64 per train

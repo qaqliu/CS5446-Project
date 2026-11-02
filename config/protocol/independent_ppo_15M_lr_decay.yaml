@@ -85,8 +85,8 @@ init_from: checkpoints/independent_ppo_random_maps_10M/seed{seed}/final.pt
 # Report metadata (scripts.html_report / export_checkpoints): changes = settings that differ from shared_ppo_random_maps.
 report:
   label: Independent PPO, 15M (10M + 5M with LR decay)
-  group: Training budget and schedule
-  order: 11
+  group: 'Network (Task 1: shared vs independent)'
+  order: 7
   changes:
     Network: One MLP 64-64 per train
     LR schedule: Linear decay to 0
