@@ -48,10 +48,14 @@ REFERENCE = "shared_ppo_random_maps"
 _REF = dict(zip(DIMENSIONS, ["Shared MLP 64-64", "ppo_demo, lr 3e‑4", "New random map each episode", "5",
                              "Constant", "0.01", "Champion + stuck"]))
 GROUPS = ["Reference", "Training budget and schedule", "Training-map strategy", "Reward",
-          "Network (Task 1: shared vs independent)", "Communication (teammate recipe)"]
+          "Network (Task 1: shared vs independent)", "Communication (teammate recipe)",
+          "Value-based (Task 4)"]
 GROUP_SIZES = {"Training budget and schedule": [5, 10, 20], "Training-map strategy": [5, 10, 20], "Reward": [5, 10, 20],
-               "Communication (teammate recipe)": [5, 10, 20]}
+               "Communication (teammate recipe)": [5, 10, 20], "Value-based (Task 4)": [5, 10, 20, 50]}
 GROUP_QUESTIONS = {
+    "Value-based (Task 4)": "Compare matched PPO and PQN under the same 3M-step task/reward/map-pool settings. "
+                           "The original 5-train reference uses a different recipe; retain it only as context. "
+                           "Primary Q execution is greedy, even in repeated sampled-mode rows.",
     "Training budget and schedule": "Does more training help, and does decaying the learning rate or continuing on larger maps (curriculum) help more?",
     "Training-map strategy": "Is it better to train on one map, a fixed pool, or a new random map every episode?",
     "Reward": "Does the extra stuck penalty matter?",
@@ -60,7 +64,8 @@ GROUP_QUESTIONS = {
                                        "(Different trainer and learning rate from the reference, so compare the communication rows with each other first.)",
 }
 MAIN = ["prioritized_planning", "departure_cap", "shared_ppo_15M_curriculum10_with_cap", "shared_ppo_random_maps_10M_with_cap",
-        "shared_ppo_15M_curriculum10", "comm_ppo_multi_size", "shortest_path", "random"]
+        "shared_ppo_15M_curriculum10", "comm_ppo_multi_size", "shortest_path", "random",
+        "value_ppo_scale20", "value_pqn_scale20"]
 FAIRNESS = ["prioritized_planning", "departure_cap", "shared_ppo_15M_curriculum10_with_cap", "shared_ppo_15M_curriculum10",
             "shortest_path"]
 CURVES = ["shared_ppo_random_maps", "shared_ppo_random_maps_10M", "shared_ppo_15M_lr_decay", "shared_ppo_15M_curriculum10",

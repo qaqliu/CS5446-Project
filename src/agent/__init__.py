@@ -1,10 +1,20 @@
 """Actor and critic interfaces for railway agents."""
 
 from .actor import (
-    Actor, CentralizedActor, IndependentActor, ShareNetworkActor,
-    CommunicationIndependentNetworkActor, CommunicationSharedNetworkActor,
+    Actor,
+    CentralizedActor,
+    CommunicationIndependentNetworkActor,
+    CommunicationSharedNetworkActor,
+    IndependentActor,
+    ShareNetworkActor,
 )
-from .critic import Critic, CentralizedCritic, IndependentCritic, ShareNetworkCritic
+from .critic import CentralizedCritic, Critic, IndependentCritic, ShareNetworkCritic
+from .value import (
+    CentralizedValueAgent,
+    IndependentValueAgent,
+    ShareNetworkValueAgent,
+    ValueAgent,
+)
 
 __all__ = [
     "Actor",
@@ -17,4 +27,8 @@ __all__ = [
     "IndependentCritic",
     "ShareNetworkCritic",
     "CentralizedCritic",
+    "ValueAgent",
+    "IndependentValueAgent",
+    "ShareNetworkValueAgent",
+    "CentralizedValueAgent",
 ]

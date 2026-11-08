@@ -81,7 +81,8 @@ def manifest(rows: list[dict]) -> str:
              "- `best.pt`: checkpoint selected on validation maps; all reported numbers use it.",
              "- `final.pt`: last checkpoint; use it as `init_from` to continue training.",
              "- `evaluation.csv`: every validation/test episode behind the reported numbers.",
-             "- Load a policy in code: `src.eval.runner.load_actor_checkpoint(\"checkpoints/<method>/seed42/best.pt\")`.", "",
+             "- Load Q/PPO policies: `src.eval.value.load_checkpoint(\"checkpoints/<method>/seed42/best.pt\")`; "
+             "`src.eval.runner.load_actor_checkpoint` remains the PPO-only loader.", "",
              "Held-out completion at each train count (sampled policy, mean over 3 seeds). "
              "Hybrids reuse the base method's `best.pt` with a departure cap chosen per size on validation.", "",
              "| Method | Folder | Recipe | Seeds | Selected epoch per seed | Env steps (selected / trained) | "

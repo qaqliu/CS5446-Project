@@ -1,9 +1,17 @@
 """Build policy agents from experiment configuration."""
 
 from src.agent import (
-    Actor, CentralizedActor, IndependentActor, ShareNetworkActor,
-    CommunicationIndependentNetworkActor, CommunicationSharedNetworkActor,
-    Critic, CentralizedCritic, IndependentCritic, ShareNetworkCritic,
+    Actor,
+    CentralizedActor,
+    CentralizedCritic,
+    CommunicationIndependentNetworkActor,
+    CommunicationSharedNetworkActor,
+    Critic,
+    IndependentActor,
+    IndependentCritic,
+    ShareNetworkActor,
+    ShareNetworkCritic,
+    ShareNetworkValueAgent,
 )
 from src.model import build_model
 
@@ -16,17 +24,21 @@ def build_agents(config: dict) -> tuple[Actor, Critic]:
     """
     actor_config = config["actor"]
     if actor_config["type"] == "independent":
-        actor = IndependentActor({
-            agent_id: build_model(**actor_config["model"])
-            for agent_id in range(config["number_of_agents"])
-        })
+        actor = IndependentActor(
+            {
+                agent_id: build_model(**actor_config["model"])
+                for agent_id in range(config["number_of_agents"])
+            }
+        )
     elif actor_config["type"] == "shared":
         actor = ShareNetworkActor(build_model(**actor_config["model"]))
     elif actor_config["type"] == "communication_independent":
-        actor = CommunicationIndependentNetworkActor({
-            agent_id: build_model(**actor_config["model"])
-            for agent_id in range(config["number_of_agents"])
-        })
+        actor = CommunicationIndependentNetworkActor(
+            {
+                agent_id: build_model(**actor_config["model"])
+                for agent_id in range(config["number_of_agents"])
+            }
+        )
     elif actor_config["type"] == "communication_shared":
         actor = CommunicationSharedNetworkActor(build_model(**actor_config["model"]))
     elif actor_config["type"] == "centralized":
@@ -36,10 +48,12 @@ def build_agents(config: dict) -> tuple[Actor, Critic]:
 
     critic_config = config["critic"]
     if critic_config["type"] == "independent":
-        critic = IndependentCritic({
-            agent_id: build_model(**critic_config["model"])
-            for agent_id in range(config["number_of_agents"])
-        })
+        critic = IndependentCritic(
+            {
+                agent_id: build_model(**critic_config["model"])
+                for agent_id in range(config["number_of_agents"])
+            }
+        )
     elif critic_config["type"] == "shared":
         critic = ShareNetworkCritic(build_model(**critic_config["model"]))
     elif critic_config["type"] == "centralized":
@@ -50,3 +64,11 @@ def build_agents(config: dict) -> tuple[Actor, Critic]:
     else:
         raise ValueError(f"Unknown critic type: {critic_config['type']!r}")
     return actor, critic
+
+
+def build_value_agent(config: dict) -> ShareNetworkValueAgent:
+    """Build a shared local Q agent from an experiment config."""
+    value_config = config["value_agent"]
+    if value_config["type"] != "shared":
+        raise ValueError("Value trainers require a shared agent.")
+    return ShareNetworkValueAgent(build_model(**value_config["model"]))

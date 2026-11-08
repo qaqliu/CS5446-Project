@@ -1,27 +1,28 @@
 """Actor-critic trainer interface and PPO demo setup."""
 
 from abc import ABC, abstractmethod
-from math import cos, pi
-from pathlib import Path
 from copy import deepcopy
 from itertools import count
+from math import cos, pi
+from pathlib import Path
 
 import torch
-from tqdm.auto import tqdm
-from torchrl.modules import MaskedCategorical
-
 from flatland.envs.rail_env import RailEnv
 from flatland.envs.step_utils.states import TrainState
 from torch.optim import Adam
 from torch.optim.lr_scheduler import (
-    ConstantLR, CosineAnnealingLR, LinearLR,
+    ConstantLR,
+    CosineAnnealingLR,
+    LinearLR,
 )
+from torchrl.modules import MaskedCategorical
+from tqdm.auto import tqdm
 
 from src.agent import Actor, Critic, IndependentCritic, ShareNetworkCritic
+from src.reward.deadlock import DeadlockChecker
 from src.utils.action_mask import get_action_mask
 from src.utils.environment import reset_env
 from src.utils.seed import set_random_seed
-from src.reward.deadlock import DeadlockChecker
 
 from .registry import register
 
@@ -762,13 +763,17 @@ class PPOTrainer(BaseTrainer):
         return {"attention_mask": available.unsqueeze(0).expand(len(observations), -1).clone()}
 
     @torch.no_grad()
-    def collect_rollout(self) -> dict:
+    def collect_rollout(self, max_steps: int | None = None) -> dict:
         """Collect one complete episode in [time, agent] tensors.
 
+        With max_steps, keep an unfinished fragment without forcing a terminal.
+        The exact-budget adapter joins fragments before the episode's PPO update.
         Keep per-step transitions and existing agent/action-mask interfaces.
         Finished agents are padded; the terminal transition remains valid.
         MLP critics evaluate all saved states after the episode, in one batch.
         """
+        if max_steps is not None and (type(max_steps) is not int or max_steps <= 0):
+            raise ValueError("max_steps must be a positive integer or None.")
         # Step 1: Prepare storage and switch networks to evaluation mode.
         rollout = {key: [] for key in (
             "observations", "infos", "next_observations", "next_infos",
@@ -790,7 +795,7 @@ class PPOTrainer(BaseTrainer):
         self.critic.eval()
         try:
             # Step 2: Advance the environment sequentially, resetting only at episode boundaries.
-            for _ in count():
+            for _ in (count() if max_steps is None else range(max_steps)):
                 if self._episode_done:
                     self._observations, self._current_infos = reset_env(self.env, self.config)
                     if self._track_deadlocks:

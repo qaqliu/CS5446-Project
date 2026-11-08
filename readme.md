@@ -84,6 +84,7 @@ python -m scripts.evaluate results/runs/shared_ppo_random_maps_seed42
 - 评估协议和评估命令：[technical_guide/evaluation/1.protocol.md](technical_guide/evaluation/1.protocol.md)
 - 已训练模型清单：[docs/checkpoints.md](docs/checkpoints.md)
 - 当前结果（方法、训练配置、图表）：[docs/report/README.md](docs/report/README.md)
+- 价值方法（PQN）、等预算 PPO 对照与复现命令：[价值方法指南](technical_guide/experiments/value_based_methods.md)；[独立评测结果](docs/report/value_based/README.md)。
 
 ## 仓库结构
 
@@ -101,7 +102,7 @@ python -m scripts.evaluate results/runs/shared_ppo_random_maps_seed42
 │   │   ├── registry.py        # 将模型名称映射到模型类，自动发现并按名称构造模型
 │   │   ├── policy_model.py    # 定义从观测到动作 logits 的策略网络
 │   │   ├── critic_model.py    # 定义从观测到状态价值 V(s) 的评论家网络
-│   │   └── value_model.py     # 用于定义从观测到各动作价值 Q(s,a) 的网络
+│   │   └── value_model.py     # 注册共享 Q 网络 mlp_q，可选 LayerNorm
 │   ├── reward/                # 定义并注册奖励规则，向训练提供每辆车的标量反馈
 │   │   ├── registry.py        # 按名称自动发现并构造奖励类
 │   │   ├── rewards.py         # 实现奖励计算，通过统一配置接口读取参数
@@ -109,7 +110,7 @@ python -m scripts.evaluate results/runs/shared_ppo_random_maps_seed42
 │   ├── trainer/               # 管理环境采样、学习目标、损失计算和参数更新
 │   │   ├── registry.py        # 将训练方法名称映射到 trainer 类并构造实例
 │   │   ├── policy_trainer.py  # 定义 BaseTrainer、固定步数 demo 和按完整 episode 采样的 PPO 训练流程
-│   │   └── value_trainer.py   # 用于定义基于 Q 值的采样、学习目标与网络更新流程
+│   │   └── value_trainer.py   # 实现共享 PQN 的采样、目标和更新
 │   └── utils/                 # 各模块共用的构建与辅助函数
 │       ├── environment.py     # 按配置创建 Flatland 环境，管理地图与任务的 reset 行为
 │       ├── agents.py          # 按配置构造网络，并封装为 actor 和 critic
@@ -203,7 +204,7 @@ Checkpoint 使用 `<epoch>.pt` 命名，包含 `epoch`、`actor`、`critic` 和�
 
 新增模型放在 `src/model/`，使用 `@register(name="your_model")` 注册，再在 YAML 的 `actor.model.name` 或 `critic.model.name` 中引用；其余模型字段作为构造参数传入，不需要逐个维护 import。Policy 模型需符合 actor 的观测与信息输入接口并输出 5 个 logits，critic 模型需符合 critic 接口并输出状态价值；可以参考两个 MLP demo，提供 `forward_batch` 可启用对应的批量前向路径。
 
-`src/agent/` 已提供独立、共享与集中式包装接口，当前 PPO demo 主要用于独立和共享网络。集中式方式需要匹配联合输入的模型，不能直接把本地观测 MLP 切换为集中式模型；单个团队价值的 centralized critic 暂不属于当前 PPO demo 的支持范围。`value.py` 已有 Q 值和 epsilon-greedy 接口，但对应模型和 trainer 尚未实现。
+`src/agent/` 已提供独立、共享与集中式包装接口，当前 PPO demo 主要用于独立和共享网络。集中式方式需要匹配联合输入的模型，不能直接把本地观测 MLP 切换为集中式模型；单个团队价值的 centralized critic 暂不属于当前 PPO demo 的支持范围。`value.py` 的 Q 值和 epsilon-greedy 接口已有 `mlp_q`、`pqn` 实现，通过 `scripts.train_value` 和对应 YAML 使用。
 
 奖励放在 `src/reward/`，使用 `@register(name="your_reward")` 注册，并通过 YAML 的 `reward.type` 选择；`reward.config` 整体传给 `__init__(self, reward_config)`，设为 `null` 时使用奖励类的默认参数。现有 `default` 使用 Flatland 默认评分，`champion` 使用 `0.01 × 距离进展 − 5 × 首次死锁 + 10 × 首次到站`，替代默认评分；三项系数分别可通过 `reward.config` 下的 `progress_coef`、`deadlock_penalty`、`finish_bonus` 配置。`champion` 基于 JBR_HSE 团队后续开源奖励组件适配，来源与实现边界见 [ChampionRewards 类说明](src/reward/rewards.py)。环境层通过 `RewardRailEnv` 在 reset 时清理奖励历史、在整步结束后统一检查死锁，避免读取部分更新的列车状态；PPO trainer 接收的仍是每辆车一个标量奖励。
 
@@ -216,7 +217,7 @@ Checkpoint 使用 `<epoch>.pt` 命名，包含 `epoch`、`actor`、`critic` 和�
 - [ ] **设计更好的奖励**：探索距离进展、到站奖励、死锁惩罚等可能的奖励设计，评估其对学习效果与列车行为的影响。
 - [ ] **比较独立网络与共享网络**：在相同地图、列车数和环境交互预算下，比较完成率、通行效率、学习速度和稳定性，并观察冲突加剧时的差异。
 - [ ] **研究泛化能力**：测试共享策略在不微调的情况下适应列车数量变化和新地图的能力，并比较固定地图训练与随机地图训练。
-- [ ] **探索基于价值的方法**：补齐 Q 网络和训练管线，在相同交互预算下比较 epsilon-greedy 方法与 PPO 的完成率、效率、稳定性和探索行为。
+- [x] **探索基于价值的方法**：实现共享 PQN，并完成 PQN 与 PPO 的等预算、三种子训练和独立评测；结果及探索执行消融见[报告](docs/report/value_based/README.md)。
 
 ---
 
@@ -257,6 +258,7 @@ python -m scripts.evaluate results/runs/shared_ppo_random_maps_seed42
 - Evaluation protocol and commands: [technical_guide/evaluation/1.protocol.md](technical_guide/evaluation/1.protocol.md#english)
 - List of trained checkpoints: [docs/checkpoints.md](docs/checkpoints.md)
 - Current results (methods, training configs, charts): [docs/report/README.md](docs/report/README.md)
+- Value-based methods and matched-budget PPO: [implementation guide](technical_guide/experiments/value_based_methods.md#english), [independent results](docs/report/value_based/README.md).
 
 ## Repository and design
 
@@ -297,4 +299,4 @@ Register scalar rewards under `src/reward/` with `@register(name="your_reward")`
 - [ ] Investigate reward designs, such as distance progress, arrival bonuses, and deadlock penalties, and evaluate their effects on learning and train behavior.
 - [ ] Compare independent and shared networks under matched scenarios and environment interaction budgets.
 - [ ] Study zero-shot transfer across train counts and maps, including fixed-map versus random-map training.
-- [ ] Implement and evaluate value-based learning with epsilon-greedy exploration against PPO under the same interaction budget.
+- [x] Implement shared PQN and evaluate PQN against PPO under a matched interaction budget, with three training seeds and an independent test cohort; see the [results](docs/report/value_based/README.md).

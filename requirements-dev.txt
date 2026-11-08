@@ -1,0 +1,2 @@
+# Optional contributor tooling; runtime dependencies are in environment.yml.
+ruff==0.15.10

@@ -1,0 +1,76 @@
+# Matched 3M-tick study; see technical_guide/experiments/value_based_methods.md.
+batch_size: 512
+checkpoint_interval: 100000
+epsilon_decay_steps: 1500000
+epsilon_end: 0.05
+epsilon_start: 1.0
+gamma: 0.99
+grid_mode: false
+height: 32
+intermediate_stops:
+  enabled: false
+  line_length: 2
+log_interval: 1
+map_seed: 142000
+max_episode_steps: 552
+max_grad_norm: 0.5
+max_num_cities: 4
+max_rail_pairs_in_city: 2
+max_rails_between_cities: 2
+number_of_agents: 20
+observation:
+  max_depth: 3
+  observation_radius: 20
+  predictor: null
+  type: flattened_normalized_tree
+q_lr: 0.0003
+random_map: true
+reward:
+  config:
+    deadlock_penalty: -0.5
+    finish_bonus: 10.0
+    progress_coef: 0.01
+  type: champion
+rollout_steps: 128
+save_dir: null
+speed_ratio_map:
+  1.0: 1.0
+total_env_steps: 3000000
+trace_lambda: 0.65
+trainer:
+  device: cpu
+  num_envs: 4
+  training_seed: 42
+  type: pqn
+training_maps:
+  generator: competition
+  mode: pool
+  pool_size: 200
+update_epochs: 4
+value_agent:
+  model:
+    hidden_dims:
+    - 64
+    - 64
+    input_dim: 1020
+    layer_norm: true
+    name: mlp_q
+  type: shared
+visualize_dir: null
+wandb:
+  enabled: false
+weight_decay: 0.0
+width: 32
+report:
+  label: Matched PQN, scale20, 3M
+  group: Value-based (Task 4)
+  order: 31
+  budget: 3.0M (exact)
+  changes:
+    Training maps: Seed-specific pool of 200 competition maps
+    Train sizes: '20'
+    LR schedule: Constant
+    Reward: Progress 0.01, first deadlock -0.5, first arrival +10
+    Network: Shared MLP 64-64 + LayerNorm
+    Trainer: PQN Q(lambda), 4 worlds, lr 3e-4
+    Entropy: epsilon 1.0 to 0.05

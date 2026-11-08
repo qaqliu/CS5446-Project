@@ -66,6 +66,7 @@ def protocol_config(policy_config: dict, trains: int, map_seed: int) -> dict:
     config["reward"] = {"type": "champion", "config": None}
     config.pop("map_pool", None)
     config.pop("training_maps", None)
+    config.pop("train_map_seeds", None)
     config["trainer"] = dict(config.get("trainer", {}), device="cpu")
     config["wandb"] = {"enabled": False}
     return config
@@ -87,7 +88,7 @@ def check_training_config(config: dict) -> list[str]:
     """Problems that would leak held-out maps into training (empty if none)."""
     problems = []
     maps = config.get("training_maps") or {}
-    seeds = set(maps.get("pool") or [])
+    seeds = set(maps.get("pool") or []) | set(config.get("train_map_seeds") or [])
     if not config.get("random_map", False):
         seeds.add(config.get("map_seed"))
     leaked = sorted(s for s in seeds if s in RESERVED_SEEDS)

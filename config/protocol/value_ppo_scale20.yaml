@@ -1,0 +1,91 @@
+# Matched 3M-tick study; see technical_guide/experiments/value_based_methods.md.
+actor:
+  model:
+    hidden_dims:
+    - 64
+    - 64
+    input_dim: 1020
+    name: mlp_policy_demo
+  type: shared
+actor_lr: 0.0003
+batch_size: 512
+checkpoint_interval: 100000
+clip_epsilon: 0.2
+critic:
+  model:
+    hidden_dims:
+    - 64
+    - 64
+    input_dim: 1020
+    name: mlp_critic_demo
+  type: shared
+critic_lr: 0.0003
+direction_entropy_coef: 0.0
+entropy_coef: 0.01
+entropy_coef_final: 0.01
+entropy_schedule: constant
+gae_horizon: 16
+gae_lambda: 0.95
+gamma: 0.99
+grid_mode: false
+height: 32
+intermediate_stops:
+  enabled: false
+  line_length: 2
+log_interval: 1
+lr_schedule: constant
+map_seed: 142000
+max_episode_steps: 552
+max_grad_norm: 0.5
+max_num_cities: 4
+max_rail_pairs_in_city: 2
+max_rails_between_cities: 2
+normalize_advantage: true
+number_of_agents: 20
+observation:
+  max_depth: 3
+  observation_radius: 20
+  predictor: null
+  type: flattened_normalized_tree
+random_map: true
+reward:
+  config:
+    deadlock_penalty: -0.5
+    finish_bonus: 10.0
+    progress_coef: 0.01
+  type: champion
+rollout_steps: 1024
+save_dir: null
+scheduling_entropy_coef: 0.0
+speed_ratio_map:
+  1.0: 1.0
+target_kl: null
+total_env_steps: 3000000
+total_epochs: 2930
+trainer:
+  device: cpu
+  training_seed: 42
+  type: ppo
+training_maps:
+  generator: competition
+  mode: pool
+  pool_size: 200
+update_epochs: 4
+value_loss_coef: 0.5
+visualize_dir: null
+wandb:
+  enabled: false
+width: 32
+report:
+  label: Matched PPO, scale20, 3M
+  group: Value-based (Task 4)
+  order: 30
+  budget: 3.0M (exact)
+  changes:
+    Training maps: Seed-specific pool of 200 competition maps
+    Train sizes: '20'
+    LR schedule: Constant
+    Reward: Progress 0.01, first deadlock -0.5, first arrival +10
+    Network: Shared MLP 64-64
+    Trainer: ppo (episodes), exact budget, lr 3e-4
+    Entropy: 0.01 (constant)
