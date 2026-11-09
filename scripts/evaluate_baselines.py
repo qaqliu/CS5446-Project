@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from src.baseline.planning import PrioritizedPlanningPolicy
+from src.baseline.planning import PrioritizedPlanningPolicy, ReplanningPrioritizedPlanningPolicy
 from src.baseline.policies import DepartureGatedShortestPathPolicy, RandomPolicy, ShortestPathPolicy
 from src.eval.protocol import (
     OPTIONAL_TEST_SIZES, SAMPLED_EPISODES, TEST_SEEDS, TEST_SIZES, VALIDATION_SEEDS, protocol_config,
@@ -43,6 +43,8 @@ def make(name: str, cap: int | None, episode: int):
         return DepartureGatedShortestPathPolicy(max_active=cap)
     if name == "prioritized_planning":
         return PrioritizedPlanningPolicy()
+    if name == "prioritized_planning_replan":
+        return ReplanningPrioritizedPlanningPolicy()
     raise ValueError(name)
 
 

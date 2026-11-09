@@ -183,3 +183,13 @@ class CentralizedCritic(Critic):
         elif not isinstance(values, dict):
             raise ValueError("A per-agent value model must return a dictionary.")
         return values
+
+    def get_values_batch(
+        self, observations: list[Observations], current_infos: list[Infos],
+    ) -> AgentValues:
+        """Use the model's forward_batch ([time, agent, 1] values) when it provides one."""
+        if self.team_value or not callable(getattr(self.model, "forward_batch", None)):
+            return super().get_values_batch(observations, current_infos)
+        agent_ids = sorted(observations[0])
+        values = self.model.forward_batch(observations)
+        return {i: values[:, col] for col, i in enumerate(agent_ids)}

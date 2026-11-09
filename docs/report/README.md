@@ -12,6 +12,7 @@ Flatland 4.3: all trains share one rail network and must reach their targets bef
 
 | Method | Kind | What it does | Tuning |
 |---|---|---|---|
+| Prioritized planning, re-plans at breakdowns | Centralized planner | As prioritized planning, but re-plans every train whenever a breakdown starts (robustness test only). | None |
 | Prioritized planning (centralized reference) | Centralized planner | Plans trains one at a time with A* in space-time, reserving cells so later trains avoid earlier ones. Sees the whole map and all trains (upper reference). | None |
 | Shortest path + departure cap | Heuristic | Shortest path, but at most k trains on the map at once; others wait at their start. | k tuned per size on validation |
 | Shortest path | Heuristic | Every train follows its own shortest path, no coordination. | None |
@@ -34,24 +35,37 @@ Each row is the reference recipe (`shared_ppo_random_maps`) except the **bold** 
 | Recipe | Folder / recipe | Network | Trainer | Training maps | Train sizes | LR schedule | Entropy | Reward | Env steps |
 |---|---|---|---|---|---|---|---|---|---|
 | **Reference** |  |  |  |  |  |  |  |  |  |
-| Shared PPO, random maps, 3M | `shared_ppo_random_maps` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 | Champion + stuck | 3.1M |
+| Shared PPO, random maps, 3M | `shared_ppo_random_maps` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| **Scaling (trained at each size)** |  |  |  |  |  |  |  |  |  |
+| Shared PPO, 3M, trained at 10 trains | `shared_ppo_random_maps_n10` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | **10** | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| Independent PPO, 3M, trained at 10 trains | `independent_ppo_random_maps_n10` | **One MLP 64-64 per train** | ppo_demo, lr 3e‑4 | New random map each episode | **10** | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| MAPPO-style (centralized critic), 3M, trained at 10 trains | `mappo_random_maps_n10` | **Shared actor + centralized critic** | ppo_demo, lr 3e‑4 | New random map each episode | **10** | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| Shared PPO, 3M, trained at 20 trains | `shared_ppo_random_maps_n20` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | **20** | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| Independent PPO, 3M, trained at 20 trains | `independent_ppo_random_maps_n20` | **One MLP 64-64 per train** | ppo_demo, lr 3e‑4 | New random map each episode | **20** | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| MAPPO-style (centralized critic), 3M, trained at 20 trains | `mappo_random_maps_n20` | **Shared actor + centralized critic** | ppo_demo, lr 3e‑4 | New random map each episode | **20** | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
 | **Training budget and schedule** |  |  |  |  |  |  |  |  |  |
-| Shared PPO, random maps, 10M | `shared_ppo_random_maps_10M` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 | Champion + stuck | **10.2M** |
+| Shared PPO, random maps, 10M | `shared_ppo_random_maps_10M` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | **10.2M** |
 | Shared PPO, 15M (10M + 5M with LR decay) | `shared_ppo_15M_lr_decay` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | **Linear decay to 0** | **0.003 → 0.001** | Champion + stuck | **15.3M** |
 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) | `shared_ppo_15M_curriculum10` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | **5, then 10** | **Linear decay to 0** | **0.003 → 0.001** | Champion + stuck | **15.3M** |
 | Shared PPO, 13M (10M + 3M curriculum at 20 trains) | `shared_ppo_13M_curriculum20` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | **5, then 20** | **Linear decay to 0** | **0.003 → 0.001** | Champion + stuck | **13.2M** |
 | **Training-map strategy** |  |  |  |  |  |  |  |  |  |
-| Shared PPO, one fixed map, 3M | `shared_ppo_fixed_map` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | **One fixed map** | 5 | Constant | 0.01 | Champion + stuck | 3.1M |
-| Shared PPO, 20-map pool, 3M | `shared_ppo_pool20` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | **Pool of 20 maps** | 5 | Constant | 0.01 | Champion + stuck | 3.1M |
+| Shared PPO, one fixed map, 3M | `shared_ppo_fixed_map` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | **One fixed map** | 5 | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| Shared PPO, 20-map pool, 3M | `shared_ppo_pool20` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | **Pool of 20 maps** | 5 | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
 | **Reward** |  |  |  |  |  |  |  |  |  |
-| Shared PPO, champion reward, 3M | `shared_ppo_random_maps_champion_reward` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 | **Champion** | 3.1M |
+| Shared PPO, champion reward, 3M | `shared_ppo_random_maps_champion_reward` | Shared MLP 64-64 | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | **Champion** | 3.1M |
 | **Network (Task 1: shared vs independent)** |  |  |  |  |  |  |  |  |  |
-| Shared PPO + train ID, 3M | `shared_id_ppo_random_maps` | **Shared MLP 64-64 + train ID** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 | Champion + stuck | 3.1M |
-| Independent PPO, 3M | `independent_ppo_random_maps` | **One MLP 64-64 per train** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 | Champion + stuck | 3.1M |
+| Shared PPO + train ID, 3M | `shared_id_ppo_random_maps` | **Shared MLP 64-64 + train ID** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| Shared PPO + train ID, 10M | `shared_id_ppo_random_maps_10M` | **Shared MLP 64-64 + train ID** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | **10.2M** |
+| Shared PPO + train ID, 15M (10M + 5M with LR decay) | `shared_id_ppo_15M_lr_decay` | **Shared MLP 64-64 + train ID** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | **Linear decay to 0** | **0.003 → 0.001** | Champion + stuck | **15.3M** |
+| Independent PPO, 3M | `independent_ppo_random_maps` | **One MLP 64-64 per train** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
+| Independent PPO, 10M | `independent_ppo_random_maps_10M` | **One MLP 64-64 per train** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | **10.2M** |
+| Independent PPO, 15M (10M + 5M with LR decay) | `independent_ppo_15M_lr_decay` | **One MLP 64-64 per train** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | **Linear decay to 0** | **0.003 → 0.001** | Champion + stuck | **15.3M** |
+| **Centralized critic (MAPPO-style)** |  |  |  |  |  |  |  |  |  |
+| MAPPO-style (centralized critic), 3M | `mappo_random_maps` | **Shared actor + centralized critic** | ppo_demo, lr 3e‑4 | New random map each episode | 5 | Constant | 0.01 → 0.001 | Champion + stuck | 3.1M |
 | **Communication (teammate recipe)** |  |  |  |  |  |  |  |  |  |
-| Communication + grouped entropy | `comm_ppo_random_maps` | **Attention communication** | **ppo (episodes), lr 1e‑5** | New random map each episode | 5 | Constant | **0.01 grouped** | **Champion** | **7500 episodes** |
-| Communication, plain entropy | `comm_ppo_random_maps_no_grouped_entropy` | **Attention communication** | **ppo (episodes), lr 1e‑5** | New random map each episode | 5 | Constant | 0.01 | **Champion** | **7500 episodes** |
-| Communication, multi-size (5/10/20) | `comm_ppo_multi_size` | **Attention communication** | **ppo (episodes), lr 1e‑5** | New random map each episode | **5, 10, 20 mixed** | Constant | **0.01 grouped** | **Champion** | **3.3M** |
+| Communication + grouped entropy | `comm_ppo_random_maps` | **Attention communication** | **ppo (episodes), lr 1e‑5** | New random map each episode | 5 | Constant | **0.01 constant + grouped** | **Champion** | **7500 episodes** |
+| Communication, plain entropy | `comm_ppo_random_maps_no_grouped_entropy` | **Attention communication** | **ppo (episodes), lr 1e‑5** | New random map each episode | 5 | Constant | **0.01 constant** | **Champion** | **7500 episodes** |
+| Communication, multi-size (5/10/20) | `comm_ppo_multi_size` | **Attention communication** | **ppo (episodes), lr 1e‑5** | New random map each episode | **5, 10, 20 mixed** | Constant | **0.01 constant + grouped** | **Champion** | **3.3M** |
 
 ### Evaluation protocol
 
@@ -89,7 +103,17 @@ Completion / competition score at each train count. RL was trained at 5 trains (
 | Shortest path | 63% / 0.59 | 40% / 0.36 | 15% / 0.13 | 8% / 0.07 | 4% / 0.03 |
 | Random | 17% / 0.12 | 16% / 0.11 | 5% / 0.04 | 3% / 0.02 | 1% / 0.01 |
 
-## 2. Training budget and schedule
+## 2. Scaling (trained at each size)
+
+Does cooperation help more as traffic grows? Each method is trained and tested at the same train count, ~3M steps each. Completion (mean ± std over 3 seeds) and competition score.
+
+| Method | 5 trains | 10 trains | 20 trains |
+|---|---|---|---|
+| Shared PPO | 71 ± 3% (0.64) `shared_ppo_random_maps` | 51 ± 13% (0.42) `shared_ppo_random_maps_n10` | 36 ± 12% (0.28) `shared_ppo_random_maps_n20` |
+| MAPPO-style (centralized critic) | 79 ± 9% (0.71) `mappo_random_maps` | 57 ± 9% (0.45) `mappo_random_maps_n10` | 4 ± 1% (0.02) `mappo_random_maps_n20` |
+| Independent PPO | 39 ± 7% (0.34) `independent_ppo_random_maps` | 22 ± 3% (0.18) `independent_ppo_random_maps_n10` | 9 ± 1% (0.07) `independent_ppo_random_maps_n20` |
+
+## 3. Training budget and schedule
 
 Does more training help, and does decaying the learning rate or continuing on larger maps (curriculum) help more?
 
@@ -103,7 +127,7 @@ Held-out completion (mean ± std over 3 seeds); only the bold settings in the RL
 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 90 ± 1% | 80 ± 2% | 47 ± 2% |
 | Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 89 ± 2% | 76 ± 6% | 42 ± 2% |
 
-## 3. Training-map strategy
+## 4. Training-map strategy
 
 Is it better to train on one map, a fixed pool, or a new random map every episode?
 
@@ -115,7 +139,7 @@ Held-out completion (mean ± std over 3 seeds); only the bold settings in the RL
 | Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 37 ± 6% | 27 ± 2% | 11 ± 1% |
 | Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 57 ± 6% | 40 ± 4% | 21 ± 2% |
 
-## 4. Reward
+## 5. Reward
 
 Does the extra stuck penalty matter?
 
@@ -126,19 +150,28 @@ Held-out completion (mean ± std over 3 seeds); only the bold settings in the RL
 | Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 71 ± 3% | 51 ± 1% | 25 ± 1% |
 | Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 74 ± 11% | 61 ± 9% | 31 ± 9% |
 
-## 5. Network (Task 1: shared vs independent)
+## 6. Network (Task 1: shared vs independent)
 
-One network shared by all trains, shared with a train ID, or one network per train?
+Shared vs independent at equal budgets (5 trains). 10M and 15M use the same schedule for every method: constant LR to 10M, then 5M with LR/entropy decay.
+
+| Method | 3M steps | 10M steps | 15M steps |
+|---|---|---|---|
+| Shared PPO | 71 ± 3% (0.64) `shared_ppo_random_maps` | 83 ± 5% (0.75) `shared_ppo_random_maps_10M` | 90 ± 3% (0.82) `shared_ppo_15M_lr_decay` |
+| Shared PPO + train ID | 76 ± 7% (0.68) `shared_id_ppo_random_maps` | 85 ± 2% (0.76) `shared_id_ppo_random_maps_10M` | 88 ± 5% (0.79) `shared_id_ppo_15M_lr_decay` |
+| Independent PPO | 39 ± 7% (0.34) `independent_ppo_random_maps` | 42 ± 6% (0.37) `independent_ppo_random_maps_10M` | 49 ± 10% (0.44) `independent_ppo_15M_lr_decay` |
+
+## 7. Centralized critic (MAPPO-style)
+
+Does a critic that sees all trains during training help the shared policy? Tested zero-shot at larger sizes like the reference; see the scaling section for training at each size.
 
 Held-out completion (mean ± std over 3 seeds); only the bold settings in the RL recipes table differ from the reference.
 
-| Recipe | 5 trains |
-|---|---|
-| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 71 ± 3% |
-| Shared PPO + train ID, 3M (`shared_id_ppo_random_maps`) | 76 ± 7% |
-| Independent PPO, 3M (`independent_ppo_random_maps`) | 39 ± 7% |
+| Recipe | 5 trains | 10 trains | 20 trains |
+|---|---|---|---|
+| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 71 ± 3% | 51 ± 1% | 25 ± 1% |
+| MAPPO-style (centralized critic), 3M (`mappo_random_maps`) | 79 ± 9% | 53 ± 7% | 26 ± 8% |
 
-## 6. Communication (teammate recipe)
+## 8. Communication (teammate recipe)
 
 Does attention-based communication between trains help, and does grouped entropy or multi-size training help it? (Different trainer and learning rate from the reference, so compare the communication rows with each other first.)
 
@@ -151,7 +184,7 @@ Held-out completion (mean ± std over 3 seeds); only the bold settings in the RL
 | Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 64 ± 3% | 42 ± 1% | 17 ± 1% |
 | Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 69 ± 4% | 47 ± 3% | 25 ± 1% |
 
-## 7. Fairness and safety (Responsible AI)
+## 9. Fairness and safety (Responsible AI)
 
 Delay Gini (lower = delay spread more evenly) / deadlock rate (share of trains ever deadlocked).
 
@@ -163,113 +196,164 @@ Delay Gini (lower = delay spread more evenly) / deadlock rate (share of trains e
 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 0.41 / 4% | 0.53 / 7% | 0.44 / 13% | 0.18 / 14% | – |
 | Shortest path | 0.18 / 16% | 0.36 / 43% | 0.16 / 58% | 0.10 / 55% | 0.07 / 53% |
 
-## 8. Full tables
+## 10. Robustness to breakdowns (Responsible AI)
+
+Test maps replayed with random breakdowns (20–50 steps, as in the NeurIPS 2020 competition); every method sees the same breakdowns. Completion (competition score); no-breakdown column = the main results.
+
+| Trains | Method | No breakdowns | Breakdown every ~400 steps | Breakdown every ~200 steps | Breakdown every ~100 steps |
+|---|---|---|---|---|---|
+| 5 | Prioritized planning (centralized reference) | 100% | 94% (0.86) | 92% (0.83) | 84% (0.75) |
+| 5 | Prioritized planning, re-plans at breakdowns | 100% | 98% (0.89) | 99% (0.89) | 96% (0.85) |
+| 5 | Shortest path + departure cap | 100% | 100% (0.82) | 100% (0.80) | 100% (0.77) |
+| 5 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 92% | 93% (0.82) | 92% (0.81) | 93% (0.79) |
+| 5 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 90% | 91% (0.81) | 92% (0.80) | 92% (0.78) |
+| 5 | Shortest path | 63% | 62% (0.57) | 65% (0.59) | 63% (0.56) |
+| 10 | Prioritized planning (centralized reference) | 100% | 88% (0.76) | 83% (0.71) | 71% (0.60) |
+| 10 | Prioritized planning, re-plans at breakdowns | 100% | 97% (0.83) | 96% (0.81) | 91% (0.75) |
+| 10 | Shortest path + departure cap | 100% | 99% (0.57) | 96% (0.54) | 90% (0.49) |
+| 10 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 87% | 86% (0.66) | 88% (0.65) | 89% (0.63) |
+| 10 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 80% | 82% (0.68) | 82% (0.67) | 82% (0.64) |
+| 10 | Shortest path | 40% | 42% (0.37) | 43% (0.37) | 41% (0.35) |
+| 20 | Prioritized planning (centralized reference) | 100% | 69% (0.60) | 55% (0.47) | 41% (0.35) |
+| 20 | Prioritized planning, re-plans at breakdowns | 100% | 87% (0.74) | 83% (0.69) | 75% (0.60) |
+| 20 | Shortest path + departure cap | 70% | 65% (0.34) | 61% (0.31) | 55% (0.28) |
+| 20 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 80% | 81% (0.57) | 84% (0.56) | 81% (0.51) |
+| 20 | Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 47% | 49% (0.40) | 49% (0.40) | 48% (0.37) |
+| 20 | Shortest path | 15% | 16% (0.14) | 15% (0.13) | 16% (0.14) |
+
+## 11. Full tables
 
 Sampled policy, mean ± std over seeds. Deterministic-policy results are in each run's `evaluation.csv` and the HTML report.
 
 ### 5 trains
 
-| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan |
-|---|---|---|---|---|---|---|
-| Prioritized planning (centralized reference) | 1 | 100% | 0.92 | 0% | 0.11 | 40 |
-| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 92 ± 3% | 0.83 ± 0.02 | 4 ± 3% | 0.38 ± 0.03 | 57 |
-| Shortest path + departure cap | 1 | 100% | 0.83 | 0% | 0.46 | 122 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 92 ± 5% | 0.82 ± 0.04 | 3 ± 3% | 0.43 ± 0.02 | 63 |
-| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 90 ± 3% | 0.82 ± 0.02 | 5 ± 2% | 0.37 ± 0.05 | 57 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 90 ± 1% | 0.81 ± 0.01 | 4 ± 1% | 0.41 ± 0.04 | 63 |
-| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 89 ± 2% | 0.80 ± 0.03 | 4 ± 2% | 0.45 ± 0.07 | 63 |
-| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 89 ± 11% | 0.79 ± 0.08 | 6 ± 4% | 0.51 ± 0.08 | 75 |
-| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 83 ± 5% | 0.75 ± 0.04 | 10 ± 5% | 0.41 ± 0.01 | 56 |
-| Shared PPO + train ID, 3M (`shared_id_ppo_random_maps`) | 3 | 76 ± 7% | 0.68 ± 0.05 | 17 ± 11% | 0.44 ± 0.03 | 56 |
-| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 74 ± 11% | 0.66 ± 0.09 | 17 ± 17% | 0.45 ± 0.05 | 64 |
-| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 71 ± 3% | 0.64 ± 0.04 | 27 ± 3% | 0.44 ± 0.02 | 57 |
-| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 69 ± 4% | 0.62 ± 0.03 | 28 ± 5% | 0.45 ± 0.06 | 65 |
-| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 66 ± 3% | 0.59 ± 0.02 | 33 ± 3% | 0.40 ± 0.02 | 62 |
-| Shortest path | 1 | 63% | 0.59 | 16% | 0.18 | 34 |
-| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 64 ± 3% | 0.56 ± 0.02 | 34 ± 4% | 0.46 ± 0.03 | 73 |
-| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 57 ± 6% | 0.50 ± 0.04 | 37 ± 4% | 0.35 ± 0.07 | 64 |
-| Independent PPO, 3M (`independent_ppo_random_maps`) | 3 | 39 ± 7% | 0.34 ± 0.07 | 33 ± 7% | 0.37 ± 0.07 | 74 |
-| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 37 ± 6% | 0.32 ± 0.06 | 42 ± 5% | 0.30 ± 0.03 | 73 |
-| Random | 1 | 17% | 0.12 | 75% | 0.14 | 144 |
+| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan | Mean travel time |
+|---|---|---|---|---|---|---|---|
+| Prioritized planning (centralized reference) | 1 | 100% | 0.92 | 0% | 0.11 | 40 | 25 |
+| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 92 ± 3% | 0.83 ± 0.02 | 4 ± 3% | 0.38 ± 0.03 | 57 | 32 |
+| Shortest path + departure cap | 1 | 100% | 0.83 | 0% | 0.46 | 122 | 23 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 92 ± 5% | 0.82 ± 0.04 | 3 ± 3% | 0.43 ± 0.02 | 63 | 35 |
+| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 90 ± 3% | 0.82 ± 0.02 | 5 ± 2% | 0.37 ± 0.05 | 57 | 35 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 90 ± 1% | 0.81 ± 0.01 | 4 ± 1% | 0.41 ± 0.04 | 63 | 37 |
+| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 89 ± 2% | 0.80 ± 0.03 | 4 ± 2% | 0.45 ± 0.07 | 63 | 36 |
+| Shared PPO + train ID, 15M (10M + 5M with LR decay) (`shared_id_ppo_15M_lr_decay`) | 3 | 88 ± 5% | 0.79 ± 0.05 | 6 ± 5% | 0.37 ± 0.05 | 55 | 33 |
+| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 89 ± 11% | 0.79 ± 0.08 | 6 ± 4% | 0.51 ± 0.08 | 75 | 30 |
+| Shared PPO + train ID, 10M (`shared_id_ppo_random_maps_10M`) | 3 | 85 ± 2% | 0.76 ± 0.01 | 8 ± 3% | 0.43 ± 0.02 | 65 | 37 |
+| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 83 ± 5% | 0.75 ± 0.04 | 10 ± 5% | 0.41 ± 0.01 | 56 | 33 |
+| MAPPO-style (centralized critic), 3M (`mappo_random_maps`) | 3 | 79 ± 9% | 0.71 ± 0.07 | 19 ± 11% | 0.43 ± 0.02 | 59 | 33 |
+| Shared PPO + train ID, 3M (`shared_id_ppo_random_maps`) | 3 | 76 ± 7% | 0.68 ± 0.05 | 17 ± 11% | 0.44 ± 0.03 | 56 | 35 |
+| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 74 ± 11% | 0.66 ± 0.09 | 17 ± 17% | 0.45 ± 0.05 | 64 | 38 |
+| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 71 ± 3% | 0.64 ± 0.04 | 27 ± 3% | 0.44 ± 0.02 | 57 | 34 |
+| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 69 ± 4% | 0.62 ± 0.03 | 28 ± 5% | 0.45 ± 0.06 | 65 | 39 |
+| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 66 ± 3% | 0.59 ± 0.02 | 33 ± 3% | 0.40 ± 0.02 | 62 | 38 |
+| Shortest path | 1 | 63% | 0.59 | 16% | 0.18 | 34 | 26 |
+| MAPPO-style (centralized critic), 3M, trained at 10 trains (`mappo_random_maps_n10`) | 3 | 68 ± 15% | 0.58 ± 0.16 | 19 ± 12% | 0.46 ± 0.07 | 105 | 41 |
+| Shared PPO, 3M, trained at 10 trains (`shared_ppo_random_maps_n10`) | 3 | 66 ± 18% | 0.57 ± 0.17 | 26 ± 18% | 0.42 ± 0.05 | 80 | 35 |
+| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 64 ± 3% | 0.56 ± 0.02 | 34 ± 4% | 0.46 ± 0.03 | 73 | 42 |
+| Shared PPO, 3M, trained at 20 trains (`shared_ppo_random_maps_n20`) | 3 | 63 ± 10% | 0.51 ± 0.09 | 12 ± 3% | 0.42 ± 0.08 | 125 | 44 |
+| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 57 ± 6% | 0.50 ± 0.04 | 37 ± 4% | 0.35 ± 0.07 | 64 | 42 |
+| Independent PPO, 15M (10M + 5M with LR decay) (`independent_ppo_15M_lr_decay`) | 3 | 49 ± 10% | 0.44 ± 0.09 | 26 ± 7% | 0.48 ± 0.10 | 54 | 37 |
+| Independent PPO, 10M (`independent_ppo_random_maps_10M`) | 3 | 42 ± 6% | 0.37 ± 0.05 | 30 ± 3% | 0.40 ± 0.05 | 70 | 41 |
+| Independent PPO, 3M (`independent_ppo_random_maps`) | 3 | 39 ± 7% | 0.34 ± 0.07 | 33 ± 7% | 0.37 ± 0.07 | 74 | 46 |
+| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 37 ± 6% | 0.32 ± 0.06 | 42 ± 5% | 0.30 ± 0.03 | 73 | 48 |
+| Random | 1 | 17% | 0.12 | 75% | 0.14 | 144 | 105 |
+| MAPPO-style (centralized critic), 3M, trained at 20 trains (`mappo_random_maps_n20`) | 3 | 6 ± 2% | 0.04 ± 0.02 | 16 ± 20% | 0.05 ± 0.03 | 175 | 137 |
 
 ### 10 trains
 
-| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan |
-|---|---|---|---|---|---|---|
-| Prioritized planning (centralized reference) | 1 | 100% | 0.87 | 0% | 0.52 | 94 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 87 ± 6% | 0.68 ± 0.01 | 2 ± 1% | 0.53 ± 0.09 | 171 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 80 ± 2% | 0.67 ± 0.01 | 7 ± 2% | 0.53 ± 0.03 | 115 |
-| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 78 ± 3% | 0.67 ± 0.02 | 7 ± 1% | 0.52 ± 0.01 | 107 |
-| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 84 ± 3% | 0.67 ± 0.03 | 3 ± 2% | 0.53 ± 0.09 | 162 |
-| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 76 ± 6% | 0.65 ± 0.05 | 6 ± 3% | 0.59 ± 0.00 | 114 |
-| Shortest path + departure cap | 1 | 100% | 0.60 | 0% | 0.41 | 368 |
-| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 74 ± 4% | 0.56 ± 0.02 | 5 ± 1% | 0.44 ± 0.08 | 185 |
-| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 64 ± 6% | 0.54 ± 0.05 | 19 ± 13% | 0.53 ± 0.04 | 104 |
-| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 61 ± 9% | 0.52 ± 0.07 | 22 ± 19% | 0.51 ± 0.03 | 114 |
-| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 51 ± 1% | 0.44 ± 0.01 | 44 ± 1% | 0.47 ± 0.03 | 102 |
-| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 47 ± 3% | 0.39 ± 0.02 | 49 ± 3% | 0.44 ± 0.01 | 105 |
-| Shortest path | 1 | 40% | 0.36 | 43% | 0.36 | 65 |
-| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 42 ± 2% | 0.36 ± 0.02 | 55 ± 2% | 0.41 ± 0.02 | 101 |
-| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 42 ± 1% | 0.35 ± 0.01 | 51 ± 3% | 0.40 ± 0.01 | 110 |
-| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 40 ± 4% | 0.34 ± 0.03 | 47 ± 8% | 0.39 ± 0.03 | 96 |
-| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 27 ± 2% | 0.23 ± 0.01 | 51 ± 3% | 0.27 ± 0.01 | 105 |
-| Random | 1 | 16% | 0.11 | 77% | 0.15 | 168 |
+| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan | Mean travel time |
+|---|---|---|---|---|---|---|---|
+| Prioritized planning (centralized reference) | 1 | 100% | 0.87 | 0% | 0.52 | 94 | 40 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 87 ± 6% | 0.68 ± 0.01 | 2 ± 1% | 0.53 ± 0.09 | 171 | 43 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 80 ± 2% | 0.67 ± 0.01 | 7 ± 2% | 0.53 ± 0.03 | 115 | 51 |
+| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 78 ± 3% | 0.67 ± 0.02 | 7 ± 1% | 0.52 ± 0.01 | 107 | 46 |
+| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 84 ± 3% | 0.67 ± 0.03 | 3 ± 2% | 0.53 ± 0.09 | 162 | 41 |
+| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 76 ± 6% | 0.65 ± 0.05 | 6 ± 3% | 0.59 ± 0.00 | 114 | 46 |
+| Shortest path + departure cap | 1 | 100% | 0.60 | 0% | 0.41 | 368 | 36 |
+| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 74 ± 4% | 0.56 ± 0.02 | 5 ± 1% | 0.44 ± 0.08 | 185 | 40 |
+| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 64 ± 6% | 0.54 ± 0.05 | 19 ± 13% | 0.53 ± 0.04 | 104 | 42 |
+| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 61 ± 9% | 0.52 ± 0.07 | 22 ± 19% | 0.51 ± 0.03 | 114 | 45 |
+| MAPPO-style (centralized critic), 3M (`mappo_random_maps`) | 3 | 53 ± 7% | 0.46 ± 0.05 | 36 ± 16% | 0.48 ± 0.05 | 95 | 38 |
+| MAPPO-style (centralized critic), 3M, trained at 10 trains (`mappo_random_maps_n10`) | 3 | 57 ± 9% | 0.45 ± 0.12 | 18 ± 12% | 0.48 ± 0.11 | 168 | 49 |
+| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 51 ± 1% | 0.44 ± 0.01 | 44 ± 1% | 0.47 ± 0.03 | 102 | 39 |
+| Shared PPO, 3M, trained at 10 trains (`shared_ppo_random_maps_n10`) | 3 | 51 ± 13% | 0.42 ± 0.12 | 36 ± 21% | 0.44 ± 0.08 | 144 | 46 |
+| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 47 ± 3% | 0.39 ± 0.02 | 49 ± 3% | 0.44 ± 0.01 | 105 | 46 |
+| Shared PPO, 3M, trained at 20 trains (`shared_ppo_random_maps_n20`) | 3 | 48 ± 10% | 0.37 ± 0.08 | 21 ± 3% | 0.41 ± 0.08 | 186 | 49 |
+| Shortest path | 1 | 40% | 0.36 | 43% | 0.36 | 65 | 27 |
+| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 42 ± 2% | 0.36 ± 0.02 | 55 ± 2% | 0.41 ± 0.02 | 101 | 40 |
+| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 42 ± 1% | 0.35 ± 0.01 | 51 ± 3% | 0.40 ± 0.01 | 110 | 44 |
+| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 40 ± 4% | 0.34 ± 0.03 | 47 ± 8% | 0.39 ± 0.03 | 96 | 39 |
+| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 27 ± 2% | 0.23 ± 0.01 | 51 ± 3% | 0.27 ± 0.01 | 105 | 45 |
+| Independent PPO, 3M, trained at 10 trains (`independent_ppo_random_maps_n10`) | 3 | 22 ± 3% | 0.18 ± 0.02 | 28 ± 7% | 0.22 ± 0.02 | 130 | 57 |
+| Random | 1 | 16% | 0.11 | 77% | 0.15 | 168 | 100 |
+| MAPPO-style (centralized critic), 3M, trained at 20 trains (`mappo_random_maps_n20`) | 3 | 5 ± 1% | 0.03 ± 0.01 | 16 ± 25% | 0.05 ± 0.01 | 181 | 116 |
 
 ### 20 trains
 
-| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan |
-|---|---|---|---|---|---|---|
-| Prioritized planning (centralized reference) | 1 | 100% | 0.86 | 0% | 0.64 | 118 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 80 ± 2% | 0.59 ± 0.02 | 2 ± 0% | 0.48 ± 0.01 | 270 |
-| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 76 ± 2% | 0.56 ± 0.01 | 3 ± 1% | 0.47 ± 0.01 | 266 |
-| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 73 ± 1% | 0.51 ± 0.04 | 5 ± 0% | 0.45 ± 0.05 | 300 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 47 ± 2% | 0.40 ± 0.01 | 13 ± 5% | 0.44 ± 0.02 | 136 |
-| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 45 ± 4% | 0.37 ± 0.03 | 12 ± 2% | 0.39 ± 0.03 | 155 |
-| Shortest path + departure cap | 1 | 70% | 0.37 | 0% | 0.37 | 534 |
-| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 42 ± 2% | 0.35 ± 0.02 | 12 ± 6% | 0.39 ± 0.03 | 134 |
-| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 38 ± 3% | 0.33 ± 0.02 | 29 ± 16% | 0.38 ± 0.02 | 114 |
-| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 31 ± 9% | 0.27 ± 0.07 | 39 ± 30% | 0.32 ± 0.08 | 117 |
-| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 25 ± 1% | 0.22 ± 0.01 | 69 ± 2% | 0.26 ± 0.01 | 84 |
-| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 25 ± 1% | 0.22 ± 0.01 | 72 ± 1% | 0.26 ± 0.01 | 101 |
-| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 21 ± 2% | 0.18 ± 0.02 | 71 ± 4% | 0.22 ± 0.02 | 98 |
-| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 19 ± 3% | 0.16 ± 0.03 | 79 ± 4% | 0.20 ± 0.03 | 95 |
-| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 17 ± 1% | 0.15 ± 0.00 | 80 ± 1% | 0.19 ± 0.00 | 89 |
-| Shortest path | 1 | 15% | 0.13 | 58% | 0.16 | 67 |
-| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 11 ± 1% | 0.09 ± 0.02 | 75 ± 3% | 0.12 ± 0.02 | 102 |
-| Random | 1 | 5% | 0.04 | 95% | 0.06 | 107 |
+| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan | Mean travel time |
+|---|---|---|---|---|---|---|---|
+| Prioritized planning (centralized reference) | 1 | 100% | 0.86 | 0% | 0.64 | 118 | 50 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 80 ± 2% | 0.59 ± 0.02 | 2 ± 0% | 0.48 ± 0.01 | 270 | 49 |
+| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 76 ± 2% | 0.56 ± 0.01 | 3 ± 1% | 0.47 ± 0.01 | 266 | 47 |
+| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 73 ± 1% | 0.51 ± 0.04 | 5 ± 0% | 0.45 ± 0.05 | 300 | 45 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 47 ± 2% | 0.40 ± 0.01 | 13 ± 5% | 0.44 ± 0.02 | 136 | 57 |
+| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 45 ± 4% | 0.37 ± 0.03 | 12 ± 2% | 0.39 ± 0.03 | 155 | 62 |
+| Shortest path + departure cap | 1 | 70% | 0.37 | 0% | 0.37 | 534 | 38 |
+| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 42 ± 2% | 0.35 ± 0.02 | 12 ± 6% | 0.39 ± 0.03 | 134 | 58 |
+| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 38 ± 3% | 0.33 ± 0.02 | 29 ± 16% | 0.38 ± 0.02 | 114 | 47 |
+| Shared PPO, 3M, trained at 20 trains (`shared_ppo_random_maps_n20`) | 3 | 36 ± 12% | 0.28 ± 0.09 | 29 ± 11% | 0.32 ± 0.09 | 236 | 53 |
+| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 31 ± 9% | 0.27 ± 0.07 | 39 ± 30% | 0.32 ± 0.08 | 117 | 46 |
+| MAPPO-style (centralized critic), 3M, trained at 10 trains (`mappo_random_maps_n10`) | 3 | 33 ± 3% | 0.27 ± 0.04 | 30 ± 16% | 0.31 ± 0.04 | 199 | 56 |
+| Shared PPO, 3M, trained at 10 trains (`shared_ppo_random_maps_n10`) | 3 | 28 ± 12% | 0.24 ± 0.10 | 50 ± 29% | 0.28 ± 0.11 | 155 | 48 |
+| MAPPO-style (centralized critic), 3M (`mappo_random_maps`) | 3 | 26 ± 8% | 0.23 ± 0.07 | 58 ± 27% | 0.27 ± 0.07 | 95 | 37 |
+| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 25 ± 1% | 0.22 ± 0.01 | 69 ± 2% | 0.26 ± 0.01 | 84 | 34 |
+| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 25 ± 1% | 0.22 ± 0.01 | 72 ± 1% | 0.26 ± 0.01 | 101 | 43 |
+| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 21 ± 2% | 0.18 ± 0.02 | 71 ± 4% | 0.22 ± 0.02 | 98 | 40 |
+| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 19 ± 3% | 0.16 ± 0.03 | 79 ± 4% | 0.20 ± 0.03 | 95 | 39 |
+| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 17 ± 1% | 0.15 ± 0.00 | 80 ± 1% | 0.19 ± 0.00 | 89 | 40 |
+| Shortest path | 1 | 15% | 0.13 | 58% | 0.16 | 67 | 24 |
+| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 11 ± 1% | 0.09 ± 0.02 | 75 ± 3% | 0.12 ± 0.02 | 102 | 49 |
+| Independent PPO, 3M, trained at 20 trains (`independent_ppo_random_maps_n20`) | 3 | 9 ± 1% | 0.07 ± 0.01 | 16 ± 5% | 0.10 ± 0.01 | 153 | 81 |
+| Random | 1 | 5% | 0.04 | 95% | 0.06 | 107 | 60 |
+| MAPPO-style (centralized critic), 3M, trained at 20 trains (`mappo_random_maps_n20`) | 3 | 4 ± 1% | 0.02 ± 0.01 | 25 ± 36% | 0.04 ± 0.01 | 233 | 157 |
 
 ### 50 trains
 
-| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan |
-|---|---|---|---|---|---|---|
-| Prioritized planning (centralized reference) | 1 | 100% | 0.82 | 0% | 0.85 | 212 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 48 ± 1% | 0.30 ± 0.03 | 3 ± 2% | 0.33 ± 0.03 | 511 |
-| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 43 ± 4% | 0.28 ± 0.00 | 4 ± 2% | 0.32 ± 0.01 | 453 |
-| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 33 ± 2% | 0.22 ± 0.02 | 5 ± 2% | 0.25 ± 0.02 | 435 |
-| Shortest path + departure cap | 1 | 32% | 0.17 | 0% | 0.20 | 671 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 17 ± 0% | 0.14 ± 0.00 | 14 ± 2% | 0.18 ± 0.00 | 226 |
-| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 16 ± 2% | 0.13 ± 0.01 | 16 ± 10% | 0.17 ± 0.02 | 204 |
-| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 15 ± 1% | 0.13 ± 0.01 | 14 ± 0% | 0.17 ± 0.01 | 235 |
-| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 14 ± 2% | 0.12 ± 0.01 | 33 ± 15% | 0.16 ± 0.01 | 200 |
-| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 11 ± 2% | 0.09 ± 0.01 | 41 ± 27% | 0.13 ± 0.01 | 177 |
-| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 10 ± 0% | 0.08 ± 0.00 | 85 ± 1% | 0.12 ± 0.00 | 147 |
-| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 9 ± 2% | 0.08 ± 0.01 | 79 ± 2% | 0.11 ± 0.02 | 146 |
-| Shortest path | 1 | 8% | 0.07 | 55% | 0.10 | 121 |
-| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 8 ± 0% | 0.07 ± 0.00 | 87 ± 1% | 0.10 ± 0.00 | 147 |
-| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 8 ± 1% | 0.07 ± 0.01 | 81 ± 4% | 0.10 ± 0.01 | 135 |
-| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 7 ± 0% | 0.06 ± 0.00 | 87 ± 1% | 0.10 ± 0.00 | 140 |
-| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 5 ± 0% | 0.04 ± 0.00 | 69 ± 3% | 0.07 ± 0.00 | 133 |
-| Random | 1 | 3% | 0.02 | 94% | 0.05 | 136 |
+| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan | Mean travel time |
+|---|---|---|---|---|---|---|---|
+| Prioritized planning (centralized reference) | 1 | 100% | 0.82 | 0% | 0.85 | 212 | 71 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 48 ± 1% | 0.30 ± 0.03 | 3 ± 2% | 0.33 ± 0.03 | 511 | 60 |
+| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 43 ± 4% | 0.28 ± 0.00 | 4 ± 2% | 0.32 ± 0.01 | 453 | 60 |
+| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 33 ± 2% | 0.22 ± 0.02 | 5 ± 2% | 0.25 ± 0.02 | 435 | 57 |
+| Shortest path + departure cap | 1 | 32% | 0.17 | 0% | 0.20 | 671 | 41 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) (`shared_ppo_15M_curriculum10`) | 3 | 17 ± 0% | 0.14 ± 0.00 | 14 ± 2% | 0.18 ± 0.00 | 226 | 66 |
+| Shared PPO, 13M (10M + 3M curriculum at 20 trains) (`shared_ppo_13M_curriculum20`) | 3 | 16 ± 2% | 0.13 ± 0.01 | 16 ± 10% | 0.17 ± 0.02 | 204 | 53 |
+| Shared PPO, 15M (10M + 5M with LR decay) (`shared_ppo_15M_lr_decay`) | 3 | 15 ± 1% | 0.13 ± 0.01 | 14 ± 0% | 0.17 ± 0.01 | 235 | 61 |
+| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 14 ± 2% | 0.12 ± 0.01 | 33 ± 15% | 0.16 ± 0.01 | 200 | 55 |
+| Shared PPO, champion reward, 3M (`shared_ppo_random_maps_champion_reward`) | 3 | 11 ± 2% | 0.09 ± 0.01 | 41 ± 27% | 0.13 ± 0.01 | 177 | 47 |
+| MAPPO-style (centralized critic), 3M (`mappo_random_maps`) | 3 | 11 ± 2% | 0.09 ± 0.01 | 63 ± 29% | 0.13 ± 0.02 | 155 | 40 |
+| Shared PPO, 3M, trained at 20 trains (`shared_ppo_random_maps_n20`) | 3 | 12 ± 5% | 0.09 ± 0.04 | 27 ± 7% | 0.13 ± 0.04 | 258 | 55 |
+| MAPPO-style (centralized critic), 3M, trained at 10 trains (`mappo_random_maps_n10`) | 3 | 12 ± 2% | 0.09 ± 0.02 | 36 ± 24% | 0.13 ± 0.02 | 310 | 60 |
+| Communication, multi-size (5/10/20) (`comm_ppo_multi_size`) | 3 | 10 ± 0% | 0.08 ± 0.00 | 85 ± 1% | 0.12 ± 0.00 | 147 | 39 |
+| Shared PPO, 3M, trained at 10 trains (`shared_ppo_random_maps_n10`) | 3 | 10 ± 3% | 0.08 ± 0.02 | 56 ± 33% | 0.12 ± 0.03 | 190 | 47 |
+| Shared PPO, random maps, 3M (`shared_ppo_random_maps`) | 3 | 9 ± 2% | 0.08 ± 0.01 | 79 ± 2% | 0.11 ± 0.02 | 146 | 38 |
+| Shortest path | 1 | 8% | 0.07 | 55% | 0.10 | 121 | 24 |
+| Communication + grouped entropy (`comm_ppo_random_maps`) | 3 | 8 ± 0% | 0.07 ± 0.00 | 87 ± 1% | 0.10 ± 0.00 | 147 | 37 |
+| Shared PPO, 20-map pool, 3M (`shared_ppo_pool20`) | 3 | 8 ± 1% | 0.07 ± 0.01 | 81 ± 4% | 0.10 ± 0.01 | 135 | 38 |
+| Communication, plain entropy (`comm_ppo_random_maps_no_grouped_entropy`) | 3 | 7 ± 0% | 0.06 ± 0.00 | 87 ± 1% | 0.10 ± 0.00 | 140 | 38 |
+| Shared PPO, one fixed map, 3M (`shared_ppo_fixed_map`) | 3 | 5 ± 0% | 0.04 ± 0.00 | 69 ± 3% | 0.07 ± 0.00 | 133 | 43 |
+| Random | 1 | 3% | 0.02 | 94% | 0.05 | 136 | 51 |
+| MAPPO-style (centralized critic), 3M, trained at 20 trains (`mappo_random_maps_n20`) | 3 | 1 ± 1% | 0.01 ± 0.01 | 31 ± 39% | 0.04 ± 0.01 | 284 | 173 |
 
 ### 100 trains
 
-| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan |
-|---|---|---|---|---|---|---|
-| Prioritized planning (centralized reference) | 1 | 100% | 0.79 | 0% | 0.73 | 309 |
-| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 28 ± 1% | 0.18 ± 0.01 | 2 ± 1% | 0.22 ± 0.02 | 640 |
-| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 27 ± 3% | 0.17 ± 0.01 | 2 ± 1% | 0.21 ± 0.01 | 619 |
-| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 21 ± 1% | 0.14 ± 0.01 | 4 ± 2% | 0.19 ± 0.01 | 509 |
-| Shortest path + departure cap | 1 | 10% | 0.08 | 2% | 0.12 | 316 |
-| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 7 ± 0% | 0.06 ± 0.00 | 33 ± 18% | 0.10 ± 0.00 | 231 |
-| Shortest path | 1 | 4% | 0.03 | 53% | 0.07 | 145 |
-| Random | 1 | 1% | 0.01 | 91% | 0.05 | 153 |
+| Method | Seeds | Completion | Competition score | Deadlock | Delay Gini | Makespan | Mean travel time |
+|---|---|---|---|---|---|---|---|
+| Prioritized planning (centralized reference) | 1 | 100% | 0.79 | 0% | 0.73 | 309 | 98 |
+| Shared PPO, 15M (10M + 5M curriculum at 10 trains) + departure cap (`shared_ppo_15M_curriculum10_with_cap`) | 3 | 28 ± 1% | 0.18 ± 0.01 | 2 ± 1% | 0.22 ± 0.02 | 640 | 67 |
+| Shared PPO, 15M (10M + 5M with LR decay) + departure cap (`shared_ppo_15M_lr_decay_with_cap`) | 3 | 27 ± 3% | 0.17 ± 0.01 | 2 ± 1% | 0.21 ± 0.01 | 619 | 65 |
+| Shared PPO, random maps, 10M + departure cap (`shared_ppo_random_maps_10M_with_cap`) | 3 | 21 ± 1% | 0.14 ± 0.01 | 4 ± 2% | 0.19 ± 0.01 | 509 | 64 |
+| Shortest path + departure cap | 1 | 10% | 0.08 | 2% | 0.12 | 316 | 48 |
+| Shared PPO, random maps, 10M (`shared_ppo_random_maps_10M`) | 3 | 7 ± 0% | 0.06 ± 0.00 | 33 ± 18% | 0.10 ± 0.00 | 231 | 50 |
+| Shortest path | 1 | 4% | 0.03 | 53% | 0.07 | 145 | 25 |
+| Random | 1 | 1% | 0.01 | 91% | 0.05 | 153 | 47 |

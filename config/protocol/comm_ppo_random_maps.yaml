@@ -96,5 +96,5 @@ report:
     Network: Attention communication
     Trainer: ppo (episodes), lr 1e‑5
     Reward: Champion
-    Entropy: 0.01 grouped
+    Entropy: 0.01 constant + grouped
   budget: 7500 episodes
