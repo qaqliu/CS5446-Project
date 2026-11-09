@@ -8,6 +8,7 @@ from flatland.envs.step_utils.states import TrainState
 from .deadlock import DeadlockChecker
 from .registry import register
 
+
 @register(name="default")
 class DefaultRewards(FlatlandDefaultRewards):
     """Adapt Flatland's default reward to the common reward-config interface."""
@@ -95,7 +96,10 @@ class ChampionRewards(Rewards[float]):
             distance = self._distance(env, agent)
             reward = self.progress_coef * (self.prev_dist[handle] - distance)
             self.prev_dist[handle] = distance
-            if self.deadlock_checker.is_deadlocked(handle) and handle not in self.already_punished:
+            if (
+                self.deadlock_checker.is_deadlocked(handle)
+                and handle not in self.already_punished
+            ):
                 reward += self.deadlock_penalty
                 self.already_punished.add(handle)
             if agent.state == TrainState.DONE and handle not in self.already_rewarded:
@@ -106,6 +110,187 @@ class ChampionRewards(Rewards[float]):
 
     def step_reward(self, agent, agent_transition_data, distance_map, elapsed_steps):
         # Global shaping runs after the whole step, not inside the per-agent loop.
+        return 0.0
+
+    def end_of_episode_reward(self, agent, distance_map, elapsed_steps):
+        return 0.0
+
+    def cumulate(self, *rewards):
+        return sum(rewards)
+
+    def empty(self):
+        return 0.0
+
+
+@register(name="distance_dense")
+class DistanceDenseRewards(Rewards[float]):
+    """Dense Manhattan Distance Reward (No Rail Topology Awareness).
+
+    High-level concept: Dense feedback based on 2D geometric coordinate distance changes.
+    Demonstrates the limitation of non-topological heuristic guidance.
+    """
+
+    def __init__(self, reward_config: dict | None):
+        reward_config = reward_config or {}
+        self.step_coef = reward_config.get("step_coef", 0.5)
+        self.finish_bonus = reward_config.get("finish_bonus", 10.0)
+
+    @staticmethod
+    def _manhattan_distance(agent):
+        if agent.state == TrainState.DONE:
+            return 0.0
+        configuration = agent.current_configuration
+        if configuration is None:
+            configuration = agent.initial_configuration
+        position = configuration[0]
+        return float(min(
+            abs(position[0] - target_position[0])
+            + abs(position[1] - target_position[1])
+            for target_position, _ in agent.targets
+        ))
+
+    def reset(self, env):
+        self.prev_dist = {a.handle: self._manhattan_distance(a) for a in env.agents}
+        self.already_rewarded = set()
+
+    def after_step(self, env, rewards):
+        shaped = {}
+        for agent in env.agents:
+            handle = agent.handle
+            if agent.state == TrainState.DONE and handle in self.already_rewarded:
+                shaped[handle] = 0.0
+                continue
+            curr_dist = self._manhattan_distance(agent)
+            prev_dist = self.prev_dist.get(handle, curr_dist)
+
+            if curr_dist < prev_dist:
+                reward = self.step_coef
+            elif curr_dist > prev_dist:
+                reward = -self.step_coef
+            else:
+                reward = -0.1
+
+            if agent.state == TrainState.DONE and handle not in self.already_rewarded:
+                reward += self.finish_bonus
+                self.already_rewarded.add(handle)
+
+            self.prev_dist[handle] = curr_dist
+            shaped[handle] = float(reward)
+        return shaped
+
+    def step_reward(self, agent, agent_transition_data, distance_map, elapsed_steps):
+        return 0.0
+
+    def end_of_episode_reward(self, agent, distance_map, elapsed_steps):
+        return 0.0
+
+    def cumulate(self, *rewards):
+        return sum(rewards)
+
+    def empty(self):
+        return 0.0
+
+
+@register(name="shortest_path_pbrs")
+class ShortestPathPBRSRewards(Rewards[float]):
+    """Potential-Based Shortest Path Reward (PBRS) without deadlock penalties.
+
+    High-level concept: Strict PBRS formulation using true topological track distance:
+    F(s, a, s') = gamma * Phi(s') - Phi(s), where Phi(s) = -d_shortest(s, target).
+    Demonstrates optimal policy invariance and fast progress learning, but omits safety.
+    """
+
+    def __init__(self, reward_config: dict | None):
+        reward_config = reward_config or {}
+        self.gamma = reward_config.get("gamma", 0.99)
+        self.step_cost = reward_config.get("step_cost", -0.05)
+
+    @staticmethod
+    def _get_potential(env, agent):
+        if agent.state == TrainState.DONE:
+            return 0.0
+        configuration = agent.current_configuration
+        if configuration is None:
+            configuration = agent.initial_configuration
+        (row, column), direction = configuration
+        distance = float(env.distance_map.get()[agent.handle, row, column, direction])
+        return -distance if math.isfinite(distance) else -1000.0
+
+    def reset(self, env):
+        self.prev_phi = {a.handle: self._get_potential(env, a) for a in env.agents}
+
+    def after_step(self, env, rewards):
+        shaped = {}
+        for agent in env.agents:
+            handle = agent.handle
+            curr_phi = self._get_potential(env, agent)
+            prev_phi = self.prev_phi.get(handle, curr_phi)
+
+            pbrs_signal = self.gamma * curr_phi - prev_phi
+            step_penalty = self.step_cost if agent.state != TrainState.DONE else 0.0
+
+            shaped[handle] = float(step_penalty + pbrs_signal)
+            self.prev_phi[handle] = curr_phi
+        return shaped
+
+    def step_reward(self, agent, agent_transition_data, distance_map, elapsed_steps):
+        return 0.0
+
+    def end_of_episode_reward(self, agent, distance_map, elapsed_steps):
+        return 0.0
+
+    def cumulate(self, *rewards):
+        return sum(rewards)
+
+    def empty(self):
+        return 0.0
+
+
+@register(name="deadlock_aware")
+class DeadlockAwareRewards(Rewards[float]):
+    """Step Penalty + Active Deadlock Safety Reward (No PBRS progress).
+
+    High-level concept: Combines standard step penalties with explicit deadlock detection via
+    DeadlockChecker. Forces agents to prioritize junction safety and yielding over aggressive pushing.
+    """
+
+    def __init__(self, reward_config: dict | None):
+        reward_config = reward_config or {}
+        self.step_cost = reward_config.get("step_cost", -0.2)
+        self.deadlock_penalty = reward_config.get("deadlock_penalty", -50.0)
+        self.finish_bonus = reward_config.get("finish_bonus", 25.0)
+        self.deadlock_checker = DeadlockChecker()
+
+    def reset(self, env):
+        self.deadlock_checker.reset(env)
+        self.already_punished = set()
+        self.already_rewarded = set()
+
+    def after_step(self, env, rewards):
+        self.deadlock_checker.update_deadlocks()
+        shaped = {}
+        for agent in env.agents:
+            handle = agent.handle
+            if agent.state == TrainState.DONE:
+                if handle not in self.already_rewarded:
+                    shaped[handle] = float(self.step_cost + self.finish_bonus)
+                    self.already_rewarded.add(handle)
+                else:
+                    shaped[handle] = 0.0
+                continue
+
+            r = self.step_cost
+
+            if (
+                self.deadlock_checker.is_deadlocked(handle)
+                and handle not in self.already_punished
+            ):
+                r += self.deadlock_penalty
+                self.already_punished.add(handle)
+            shaped[handle] = float(r)
+        return shaped
+
+    def step_reward(self, agent, agent_transition_data, distance_map, elapsed_steps):
         return 0.0
 
     def end_of_episode_reward(self, agent, distance_map, elapsed_steps):
